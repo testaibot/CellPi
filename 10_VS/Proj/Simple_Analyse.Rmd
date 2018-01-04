@@ -32,7 +32,7 @@ seur_1 <- seur_find_multiplication(seur, cluster = "1", regress_cc_diff = T)
 ```{r}
 
 par( mfrow = c(1,1))
-for(gene in intersect(rownames(cluster.markers[1]$ident),  markers))
+for(gene in intersect(rownames(cl_markers$cluster.markers[1]$ident),  markers))
 {
   FeaturePlot(object = curr, reduction.use = "tsne", features.plot = gene, cols.use = c("red", "green"))
 }
