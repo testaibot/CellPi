@@ -612,7 +612,9 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, consider_cel
   print("Simple preprocessing...")
   sce <- simple_preprocessing(sce)
   dim(sce)
-  if(!consider_cell_cycle && !impute)
+   
+  #cell_cycle_decomposition currently has no effect without impute step 
+  if(!impute)
   {
     return(2^rel1abs(exprs(sce))-1)
   }
