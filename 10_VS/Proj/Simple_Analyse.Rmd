@@ -14,6 +14,8 @@ plot_pca(curr)
   
 cl_markers <- find_markers(curr, test.use = "MAST", max.cells.per.ident = 100, logfc.threshold = 0.5, only.pos = T)
 plot_venn(cl_markers)
+lapply(1:length(cl_markers$cluster.markers), function(i){return (array(gene_annot_convert_to(rownames(cl_markers$cluster.markers[i]$ident), "symbol")$new))})
+
 
 #test GO, default params
 #GO_enr(cl_markers)
