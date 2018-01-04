@@ -205,6 +205,8 @@ types2names <- function(types)
     mtx <- mtx[match(annot_converted$old, rownames(mtx)),]
     rownames(mtx) <- annot_converted$new
     
+    mtx <- mtx[unique(rownames(mtx)),]
+    
     return(mtx)
   }
   
@@ -332,6 +334,13 @@ types2names <- function(types)
     return(expr_all)
   }
   
+  norm_levels <- function(sce)
+  {
+    min_l <- max(2, ncol(sce)/100)
+    max_l <- min(ncol(sce)/10, 100)
+    return (seq(min_l, max_l, (max_l - min_l)/10))
+  }
+  
   sce_norm <- function (mtx)
   {
     filter_simple <- function(sce)
@@ -353,7 +362,7 @@ types2names <- function(types)
     sce_temp <- SingleCellExperiment(assays = list(counts = mtx))
     sce_temp <- filter_simple(sce_temp)
 
-    sce_temp <- computeSumFactors(sce_temp, sizes=seq(2, ncol(sce_temp), 5), positive = F)
+    sce_temp <- computeSumFactors(sce_temp, sizes=norm_levels(sce_temp), positive = F)
     summary(sizeFactors(sce_temp))
     sce_temp<-normalize(sce_temp)
     return (sce_temp)
@@ -484,7 +493,7 @@ types2names <- function(types)
     }
   
     #Deconvolution method to normalize genes with lots of zero-counts
-    sce <- computeSumFactors(sce, sizes=seq(2, ncol(sce), 5), positive = F)
+    sce <- computeSumFactors(sce, sizes=norm_levels(sce), positive = F)
     summary(sizeFactors(sce))
     sce <- normalise(sce)
     
@@ -1056,6 +1065,3 @@ plot_seur_3d <- function(seurat_datset)
 
 }
 ```
-
-
-  bvxbxcvb
