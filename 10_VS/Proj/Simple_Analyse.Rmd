@@ -1,0 +1,43 @@
+
+```{r}
+#load to seurat
+my_data_init <- merge_splits(curr_proc5)
+seur <- seur_find_multiplication(CreateSeuratObject(raw.data = my_data_init), regress_cc_diff = T)
+```
+
+```{r}
+curr <- seur
+#analyse current split
+table(get_orig_ident(curr), get_ident(curr))
+plot_tsn(curr)
+plot_pca(curr)
+  
+cl_markers <- find_markers(curr, test.use = "MAST", max.cells.per.ident = 100, logfc.threshold = 0.5, only.pos = T)
+plot_venn(cl_markers)
+
+#test GO, default params
+#GO_enr(cl_markers)
+```
+
+```{r}
+#get sub-cluster split
+seur_1 <- seur_find_multiplication(seur, cluster = "1", regress_cc_diff = T)
+#go to prev chunk
+#curr <- seur_1
+
+```
+
+
+
+```{r}
+
+par( mfrow = c(1,1))
+for(gene in intersect(rownames(cluster.markers[1]$ident),  markers))
+{
+  FeaturePlot(object = curr, reduction.use = "tsne", features.plot = gene, cols.use = c("red", "green"))
+}
+
+```
+
+
+
