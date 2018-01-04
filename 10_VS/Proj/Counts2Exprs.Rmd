@@ -849,12 +849,10 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
   
   for(pc_use in seq(100,30,-10))
   {
-    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), do.print = FALSE, pcs.print = NULL, genes.print = NULL, pcs.compute = pc_use), warning = function(w) {
-      if("did not converge--results might be invlaid!; try increasing work or maxit" %in% w)
-      {
-        return(NULL)
-      }
-})
+    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), do.print = FALSE, pcs.print = NULL, genes.print = NULL, pcs.compute = pc_use),
+                      error = function(e) {return(NULL)}, 
+                      warning = function(w) {return(NULL)}
+                      )
     if(!is.null(seur1))
     {
       print(paste0("pc ", pc_use))
