@@ -616,7 +616,7 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, consider_cel
   #cell_cycle_decomposition currently has no effect without impute step 
   if(!impute)
   {
-    return(2^rel1abs(exprs(sce))-1)
+    return(2^rel2abs(exprs(sce))-1)
   }
   print("Cell cycle based classification...")
   sce_cycled <- NULL
