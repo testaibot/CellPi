@@ -338,6 +338,7 @@ types2names <- function(types)
   {
     min_l <- max(2, ncol(sce)/100)
     max_l <- min(ncol(sce)/10, 100)
+
     return (seq(min_l, max_l, (max_l - min_l)/10))
   }
   
@@ -577,7 +578,7 @@ types2names <- function(types)
     }
 
   
-full_preprocess <- function(working_path = NULL, counts_mtx = NULL, consider_cell_cycle = T, impute = F, markers = NULL, clean = FALSE)
+full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle = T, impute = F, markers = NULL, clean = FALSE)
 {
   print("Loading data...")
   
@@ -612,15 +613,14 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, consider_cel
   print("Simple preprocessing...")
   sce <- simple_preprocessing(sce)
   dim(sce)
-   
-  #cell_cycle_decomposition currently has no effect without impute step 
-  if(!impute)
+  
+  if(!cell_cycle && !impute)
   {
     return(2^rel2abs(exprs(sce))-1)
   }
   print("Cell cycle based classification...")
   sce_cycled <- NULL
-  if(consider_cell_cycle)
+  if(cell_cycle)
   {
     sce_cycled <- tryCatch(cell_cycle_decomposed_normalization(sce), error = function(e) {})
   }
