@@ -847,12 +847,28 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
     seur <- ScaleData(object = seur)
   }
   
-  seur <- RunPCA(object = seur, do.print = FALSE, pcs.print = NULL, genes.print = NULL)
-  seur <- ProjectPCA(object = seur, do.print = FALSE)
-  
-  for(perplex in seq(300, 5,-5))
+  for(pc_use in seq(100,30,-10))
   {
-    seur1 <- tryCatch(RunTSNE(object = seur, dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {})
+    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), do.print = FALSE, pcs.print = NULL, genes.print = NULL, pcs.compute = pc_use), warning = function(w) {
+      if("did not converge--results might be invlaid!; try increasing work or maxit" %in% w)
+      {
+        return(NULL)
+      }
+})
+    if(!is.null(seur1))
+    {
+      print(paste0("pc ", pc_use))
+      seur <- seur1
+      break
+    }
+  }
+  
+ 
+  #seur <- ProjectPCA(object = seur, do.print = FALSE)
+  
+  for(perplex in seq(300, 5, -5))
+  {
+    seur1 <- tryCatch(RunTSNE(object = seur, dims.use = 1:ncol(seur@dr$pca@cell.embeddings), dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {})
     if(!is.null(seur1))
     {
       print(paste0("perplex ", perplex))
@@ -860,7 +876,6 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
       break
     }
   }
-  
   
   for(rez in seq(0.1, 0.9, 0.1))
   {
