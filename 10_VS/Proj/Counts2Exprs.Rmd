@@ -914,12 +914,16 @@ seur_find_multiplication <- function(seur, cluster = NULL, gran_shresh = 3, ...)
   for(mult in seq(curr_mult, 20, 2))
   {
     print(paste0("mult ", mult))
-    seur_mult <- tryCatch(seurat_analyse(dub(raw_data, 1), ...),error = function(e) {print(e)})
+    seur_mult <- tryCatch(seurat_analyse(dub(raw_data, mult), ...),error = function(e) {print(e)})
     if(!is.null(seur_mult))
     {
       if(length(which(table(get_ident(seur_mult))>gran_shresh))>1)
       {
         return(seur_mult)
+      }
+      if(length(table(get_ident(seur_mult)))==ncol(raw_data))
+      {
+        return(NULL)
       }
     }
   }
