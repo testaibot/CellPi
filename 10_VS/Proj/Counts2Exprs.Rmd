@@ -232,31 +232,38 @@ types2names <- function(types)
     sorted <- B[-grep("cell_sum", rownames(B)), -grep("gene_sum", colnames(B))]
     return (sorted[rowSums(sorted)>0, colSums(sorted)>0])
   }
-  
   rel2abs <- function(mtx)
   {
-    fd <- as.matrix(rownames(mtx))
-    rownames(fd) <- fd
-    colnames(fd)[1]<-"gene_short_name"
-    
-    
-    pd <- as.matrix(colnames(mtx))
-    rownames(pd) <- pd
-    colnames(pd)[1]<-"cell_name"
-    
-    pd <- new("AnnotatedDataFrame", data = as.data.frame(pd))
-    fd <- new("AnnotatedDataFrame", data = as.data.frame(fd))
-    
-    relative <- newCellDataSet(as.matrix(mtx),
-                               phenoData = pd,
-                               featureData = fd,
-                               lowerDetectionLimit = 0.1,
-                               expressionFamily = tobit(Lower = 0.1))
-    
-    rpc_matrix <- sort_by_rowcol_sum(na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = cores))))))
-    
-    return (rpc_matrix)
+    rel2abs_base <- function(mtx)
+    {
+      fd <- as.matrix(rownames(mtx))
+      rownames(fd) <- fd
+      colnames(fd)[1]<-"gene_short_name"
+      
+      pd <- as.matrix(colnames(mtx))
+      rownames(pd) <- pd
+      colnames(pd)[1]<-"cell_name"
+      
+      pd <- new("AnnotatedDataFrame", data = as.data.frame(pd))
+      fd <- new("AnnotatedDataFrame", data = as.data.frame(fd))
+      
+      relative <- newCellDataSet(as.matrix(mtx),
+                                 phenoData = pd,
+                                 featureData = fd,
+                                 lowerDetectionLimit = 0.1,
+                                 expressionFamily = tobit(Lower = 0.1))
+      
+      rpc_matrix <- sort_by_rowcol_sum(na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = cores))))))
+      
+      return (rpc_matrix)
+    }
+    norm <- tryCatch(rel2abs_base(mtx), error = function(e){})
+    if(is.null(norm))
+    {
+      norm <- t(rel2abs_base(t(curr_proc)))
+    }
   }
+  
   
   saver_impute <-function(expr, size_factors = NULL, genes = NULL, cores = parallel:::detectCores()-1)
   {
@@ -334,12 +341,16 @@ types2names <- function(types)
     return(expr_all)
   }
   
-  norm_levels <- function(sce)
+  get_sum_factors <- function(sce)
   {
     min_l <- max(2, ncol(sce)/100)
     max_l <- min(ncol(sce)/10, 100)
-
-    return (seq(min_l, max_l, (max_l - min_l)/10))
+    norm_levels <- unique(round(seq(min_l, max_l, (max_l - min_l)/10)))
+    
+    sce <- tryCatch(computeSumFactors(sce, sizes=norm_levels, positive = F), 
+                         warning = function(w) 
+                           {computeSumFactors(sce, sizes=norm_levels, positive = T)})
+    return (sce)
   }
   
   sce_norm <- function (mtx)
@@ -362,8 +373,9 @@ types2names <- function(types)
     
     sce_temp <- SingleCellExperiment(assays = list(counts = mtx))
     sce_temp <- filter_simple(sce_temp)
-
-    sce_temp <- computeSumFactors(sce_temp, sizes=norm_levels(sce_temp), positive = F)
+    
+    sce_temp <- get_sum_factors(sce_temp)
+    
     summary(sizeFactors(sce_temp))
     sce_temp<-normalize(sce_temp)
     return (sce_temp)
@@ -494,7 +506,7 @@ types2names <- function(types)
     }
   
     #Deconvolution method to normalize genes with lots of zero-counts
-    sce <- computeSumFactors(sce, sizes=norm_levels(sce), positive = F)
+    sce <- get_sum_factors(sce)
     summary(sizeFactors(sce))
     sce <- normalise(sce)
     
@@ -574,7 +586,7 @@ types2names <- function(types)
       imputed_genes2 <- saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic2)
       
       
-      return(list(x = rel2abs(imputed_genes0), y = rel2abs(imputed_genes1), z = rel2abs(imputed_genes2)))
+      return(list(x = imputed_genes0, y = imputed_genes1, z = imputed_genes2))
     }
 
   
@@ -616,7 +628,7 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
   
   if(!cell_cycle && !impute)
   {
-    return(2^rel2abs(exprs(sce))-1)
+    return(2^exprs(sce)-1)
   }
   print("Cell cycle based classification...")
   sce_cycled <- NULL
@@ -631,18 +643,22 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
     lapply(sce_cycled, dim)
     if(impute)
     {
+      print("SI")
       sce_saver <- lapply(sce_cycled, saver_three_path_impute)
     }else{
-      sce_saver <- lapply(sce_cycled, function(sce_set){return(2^rel2abs(exprs(sce_set)))-1})
+      print("S")
+      sce_saver <- lapply(sce_cycled, function(sce_set){return(2^simple_preprocessing(sce_set)-1)})
     }
   }
   else
   {
     if(impute)
     {
+      print("I")
       sce_saver <- saver_three_path_impute(sce)
     }else{
-      sce_saver <- 2^rel2abs(exprs(sce))-1
+      print("N")
+      sce_saver <- 2^exprs(sce)-1
     }
   }
   
@@ -741,9 +757,9 @@ get_orig_ident <- function(seur, types = NULL)
 
 merge_saver_split <- function(saver_splited, lA = ".x", lB = ".y", lC = ".z")
 {
-  A <- rel2abs(saver_splited$x)
-  B <- rel2abs(saver_splited$y)
-  C <- rel2abs(saver_splited$z)
+  A <- na.omit(rel2abs(saver_splited$x))
+  B <- na.omit(rel2abs(saver_splited$y))
+  C <- na.omit(rel2abs(saver_splited$z))
     
   genes_all <- unique(c(rownames(A), rownames(B), rownames(C)))
       
@@ -805,7 +821,7 @@ merge_splits <- function(splits)
   {
     return(as(merge_saver_split(splits), "dgCMatrix"))
   }
-  return(rel2abs(splits))
+  return(na.omit(rel2abs(splits)))
 }
 
 
@@ -819,7 +835,7 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
   seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
     
   seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
-  seur <- FindVariableGenes(object = seur, do.plot = F)
+  #seur <- FindVariableGenes(object = seur, do.plot = F)
     
   if(regress)
   {
