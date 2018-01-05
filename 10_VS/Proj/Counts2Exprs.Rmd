@@ -865,7 +865,7 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
   
   for(pc_use in seq(100,30,-10))
   {
-    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), do.print = FALSE, pcs.print = NULL, genes.print = NULL, pcs.compute = pc_use),
+    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), do.print = FALSE, pcs.print = NULL, genes.print = NULL, pcs.compute = pc_use, rev.pca = T),
                       error = function(e) {return(NULL)}, 
                       warning = function(w) {return(NULL)}
                       )
