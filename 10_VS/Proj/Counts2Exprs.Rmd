@@ -1035,7 +1035,6 @@ find_markers <- function(curr_seur, p_val = 0.05, ...)
 
 GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T)
 {
-  new_window = T
   
   cluster.markers <- cl_markers$cluster.markers
   cluster.markers.list <- cl_markers$cluster.markers.list
@@ -1045,15 +1044,21 @@ GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T)
   {
     cl_mark <- cluster.markers.list[i]$item
     
-    x <- enrichGO(gene=cl_mark, pvalueCutoff=0.05, qvalueCutoff = 0.05, readable=T, OrgDb = get_annot_db(rownames(cluster.markers$ident)))
-    x@result$Description[order(x@result$GeneRatio,decreasing = T)]
-    enrichMap(x, layout=igraph::layout_components, vertex.label.cex = 1, fixed = !new_window)
-    
-    cnetplot(x, categorySize="GeneRatio", fixed = !new_window)
+    x <- enrichGO(gene=cl_mark, pvalueCutoff=0.05, qvalueCutoff=0.05, readable=T, OrgDb = get_annot_db(rownames(cluster.markers$ident)))
+    if(nrow(x@result)>0)
+    {
+      x@result$Description[order(x@result$GeneRatio,decreasing = T)]
+      enrichMap(x, layout=igraph::layout_components, vertex.label.cex = 1, fixed = !new_window)
+      cnetplot(x, categorySize="GeneRatio", fixed = !new_window)
+    }
   }
   names(cluster.markers.list) <-  sapply(1:length(cluster.markers.list), function(cl){return(paste0("X",cl-1))})
-  res <- compareCluster(cluster.markers.list, fun="enrichGO", OrgDb = get_annot_db(rownames(cluster.markers$ident)))
-  plot(res, showCategory=20)
+  
+  res <- tryCatch(compareCluster(cluster.markers.list, fun="enrichGO", OrgDb = get_annot_db(rownames(cluster.markers$ident))), error = function(e){"e"})
+    if(typeof(res) != "character")
+    {
+      plot(res, showCategory=20)
+    }
 }
 
 ```
