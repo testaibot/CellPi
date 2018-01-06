@@ -235,6 +235,7 @@ types2names <- function(types)
 
   rel2abs <- function(mtx)
   {
+    
     rel2abs_base <- function(mtx)
     {
       fd <- as.matrix(rownames(mtx))
@@ -258,12 +259,13 @@ types2names <- function(types)
       
       return (rpc_matrix)
     }
-    norm <- tryCatch(rel2abs_base(mtx), error = function(e){print(e)})
-    if(is.null(norm))
+    
+    norm <- tryCatch(rel2abs_base(mtx), error = function(e){"e"})
+    if(typeof(norm) != "character")
     {
-      norm <- t(rel2abs_base(t(curr_proc)))
+      return(norm) 
     }
-    return(norm)
+    return(t(rel2abs_base(t(mtx))))
   }
   
   
@@ -501,8 +503,8 @@ types2names <- function(types)
                ByMito=sum(mito.drop), BySpike=sum(spike.drop), Remaining=ncol(sce))
     
     #Computing separate size factors for spike-in transcripts if exists
-    sce1 <- tryCatch(computeSpikeFactors(sce, type="ercc", general.use=FALSE), error = function(e) {})
-    if(!is.null(sce1))
+    sce1 <- tryCatch(computeSpikeFactors(sce, type="ercc", general.use=FALSE), error = function(e) {"e"})
+    if(typeof(sce1) != "character")
     {
       sce <- sce1
     }
@@ -633,14 +635,15 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
     return(2^exprs(sce)-1)
   }
   print("Cell cycle based classification...")
-  sce_cycled <- NULL
+
+  sce_cycled <- "e"
   if(cell_cycle)
   {
-    sce_cycled <- tryCatch(cell_cycle_decomposed_normalization(sce), error = function(e) {})
+    sce_cycled <- tryCatch(cell_cycle_decomposed_normalization(sce), error = function(e) {"e"})
   }
   
   print("Imputing dropouts...")
-  if(!is.null(sce_cycled))
+  if(typeof(sce_cycled) != "character")
   {
     lapply(sce_cycled, dim)
     if(impute)
@@ -663,7 +666,8 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
       sce_saver <- 2^exprs(sce)-1
     }
   }
-  
+  print("Merge splited")
+  sce_saver <- merge_splits(sce_saver)
   print("Done...")
   saveRDS(sce_saver, file = "expression_final.rds")
   return(sce_saver)
@@ -833,7 +837,7 @@ merge_splits <- function(splits)
 ```{r}
 seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
 {
-  seur <- CreateSeuratObject(raw.data = mtx)
+  seur <- CreateSeuratObject(raw.data = my_data_init)
   seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
     
   seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
@@ -846,9 +850,9 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
     cc <- cell_cycle_markers(genome$org)
     G2M <- gene_annot_convert_to(unique(cc$G2M$first), genome$annot)$new
     S <- gene_annot_convert_to(unique(cc$S$first), genome$annot)$new
-    seur1 <- tryCatch(CellCycleScoring(seur, G2M, S, set.ident = F), error = function(e) {})
+    seur1 <- tryCatch(CellCycleScoring(seur, G2M, S, set.ident = F), error = function(e) {"e"})
     
-    if(!is.null(seur1))
+    if(typeof(seur1) != "character")
     {
       seur<-seur1
       if(regress_cc_diff)
@@ -866,18 +870,16 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
     seur <- ScaleData(object = seur)
   }
   
-  for(pc_use in seq(100,30,-10))
+  for(pc_use in seq(100, 10,-10))
   {
     seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), print.results = FALSE, pcs.print
 
  = NULL, do.print = F, pcs.compute = pc_use, rev.pca = T),
-                      error = function(e) {
-                        print(e)
-                        return(NULL)}, 
-                      warning = function(w) {
-                        return(NULL)}
+                      error = function(e) {"e"}, 
+                      warning = function(w) {"e"}
                       )
-    if(!is.null(seur1))
+    
+    if(typeof(seur1) != "character")
     {
       print(paste0("pc ", pc_use))
       seur <- seur1
@@ -890,8 +892,8 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
   
   for(perplex in seq(300, 5, -5))
   {
-    seur1 <- tryCatch(RunTSNE(object = seur, dims.use = 1:ncol(seur@dr$pca@cell.embeddings), dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {})
-    if(!is.null(seur1))
+    seur1 <- tryCatch(RunTSNE(object = seur, dims.use = 1:ncol(seur@dr$pca@cell.embeddings), dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
+    if(typeof(seur1) != "character")
     {
       print(paste0("perplex ", perplex))
       seur <- seur1
@@ -938,8 +940,8 @@ seur_find_multiplication <- function(seur, cluster = NULL, gran_shresh = 3, ...)
   for(mult in seq(curr_mult, 20, 2))
   {
     print(paste0("mult ", mult))
-    seur_mult <- tryCatch(seurat_analyse(dub(raw_data, mult), ...),error = function(e) {print(e)})
-    if(!is.null(seur_mult))
+    seur_mult <- tryCatch(seurat_analyse(dub(raw_data, mult), ...),error = function(e) {"e"})
+    if(typeof(seur_mult) != "character")
     {
       if(length(which(table(get_ident(seur_mult))>gran_shresh))>1)
       {

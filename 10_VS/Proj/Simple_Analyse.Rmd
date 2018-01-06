@@ -1,20 +1,25 @@
 
 ```{r}
 #load to seurat
-my_data_init <- merge_splits(curr_proc)
-unique(get_types(colnames((my_data_init))))
+my_data_init <- curr_proc
+table(get_types(colnames((my_data_init))))
 
 seur <- seur_find_multiplication(CreateSeuratObject(raw.data = my_data_init), regress_cc_diff = T)
 ```
 
 ```{r}
 curr <- seur
+
+plot_seur_3d(curr)
+
+#temp <- FindAllMarkers(seur, radius = 0.3)
+
 #analyse current split
 table(get_orig_ident(curr), get_ident(curr))
 plot_tsn(curr)
 plot_pca(curr)
   
-cl_markers <- find_markers(curr, test.use = "MAST", logfc.threshold = 0.5, only.pos = T)
+cl_markers <- find_markers(curr, test.use = "MAST", logfc.threshold = 0.1, only.pos = T, min.pct = 0.8, min.diff.pct = 0.5)
 plot_venn(cl_markers)
 lapply(1:length(cl_markers$cluster.markers), function(i){return (array(gene_annot_convert_to(rownames(cl_markers$cluster.markers[i]$ident), "symbol")$new))})
 
@@ -43,5 +48,13 @@ for(gene in intersect(rownames(cl_markers$cluster.markers[1]$ident),  markers))
 
 ```
 
+```{r}
 
+par( mfrow = c(1,1))
+for(gene in rownames(cl_markers$cluster.markers[2]$ident)[1:20])
+{
+  FeaturePlot(object = curr, reduction.use = "tsne", features.plot = gene, cols.use = c("red", "green"))
+}
+
+```
 
