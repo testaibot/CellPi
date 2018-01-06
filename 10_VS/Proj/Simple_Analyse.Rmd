@@ -10,7 +10,7 @@ seur <- seur_find_multiplication(CreateSeuratObject(raw.data = my_data_init), re
 ```{r}
 curr <- seur
 
-plot_seur_3d(curr)
+#plot_seur_3d(curr)
 
 #temp <- FindAllMarkers(seur, radius = 0.3)
 
@@ -24,7 +24,7 @@ plot_venn(cl_markers)
 lapply(1:length(cl_markers$cluster.markers), function(i){return (array(gene_annot_convert_to(rownames(cl_markers$cluster.markers[i]$ident), "symbol")$new))})
 
 #test GO, default params
-GO_enr(cl_markers)
+#GO_enr(cl_markers)
 ```
 
 ```{r}
