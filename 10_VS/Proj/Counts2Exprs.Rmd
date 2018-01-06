@@ -232,6 +232,7 @@ types2names <- function(types)
     sorted <- B[-grep("cell_sum", rownames(B)), -grep("gene_sum", colnames(B))]
     return (sorted[rowSums(sorted)>0, colSums(sorted)>0])
   }
+
   rel2abs <- function(mtx)
   {
     rel2abs_base <- function(mtx)
@@ -257,11 +258,12 @@ types2names <- function(types)
       
       return (rpc_matrix)
     }
-    norm <- tryCatch(rel2abs_base(mtx), error = function(e){})
+    norm <- tryCatch(rel2abs_base(mtx), error = function(e){print(e)})
     if(is.null(norm))
     {
       norm <- t(rel2abs_base(t(curr_proc)))
     }
+    return(norm)
   }
   
   
@@ -835,6 +837,7 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
   seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
     
   seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
+  
   #seur <- FindVariableGenes(object = seur, do.plot = F)
     
   if(regress)
@@ -865,9 +868,14 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
   
   for(pc_use in seq(100,30,-10))
   {
-    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), do.print = FALSE, pcs.print = NULL, genes.print = NULL, pcs.compute = pc_use, rev.pca = T),
-                      error = function(e) {return(NULL)}, 
-                      warning = function(w) {return(NULL)}
+    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), print.results = FALSE, pcs.print
+
+ = NULL, do.print = F, pcs.compute = pc_use, rev.pca = T),
+                      error = function(e) {
+                        print(e)
+                        return(NULL)}, 
+                      warning = function(w) {
+                        return(NULL)}
                       )
     if(!is.null(seur1))
     {
@@ -1051,27 +1059,11 @@ GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T)
 ```{r}
 plot_seur_3d <- function(seurat_datset)
 {
+  seurat_datset <- seur
   library(plyr)
   library(scatterplot3d)
   library(rgl)
-  
-  merge_embed <- function(M)
-  {
-    resi <- function(l)
-    {
-      return(plotrix::rescale(l, c(0,1)))
-    }
-    
-    embed <- resi(M[,1])
-    for(i in 2:ncol(M))
-    {
-      temp <- resi(M[,i-1])
-      embed <- embed + (abs(min(temp))+abs(max(temp)))*resi(M[,i])
-    }
-    return(embed)
-  }
-
-
+   
     seurat_datset <- RunTSNE(object = seurat_datset, check_duplicates = FALSE, dim.embed = 3)
     
     rl <- cbind(
@@ -1087,7 +1079,7 @@ plot_seur_3d <- function(seurat_datset)
 
   mfrow3d(1, 2)
   next3d()
-  plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=1)
+  plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=0.3)
   legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=3, pch = 20)
   next3d()
 
@@ -1095,7 +1087,7 @@ plot_seur_3d <- function(seurat_datset)
   cells_lab <- unique(curr_labels)
   labels_uniq <- data.frame(names = cells_lab, colors =  rainbow(length(cells_lab)))
 
-  plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=1)
+  plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=0.3)
   legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=3, pch = 20)  
 
 }
