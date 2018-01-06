@@ -1057,7 +1057,7 @@ GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T)
 ```
 
 ```{r}
-plot_seur_3d <- function(seurat_datset)
+plot_seur_3d <- function(seurat_datset, radius = 1)
 {
   seurat_datset <- seur
   library(plyr)
@@ -1080,7 +1080,7 @@ plot_seur_3d <- function(seurat_datset)
   mfrow3d(1, 2)
   next3d()
   plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=0.3)
-  legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=3, pch = 20)
+  legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=3, pch = radius)
   next3d()
 
   curr_labels <- seurat_datset@meta.data$orig.ident
@@ -1088,7 +1088,7 @@ plot_seur_3d <- function(seurat_datset)
   labels_uniq <- data.frame(names = cells_lab, colors =  rainbow(length(cells_lab)))
 
   plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=0.3)
-  legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=3, pch = 20)  
+  legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=3, pch = radius)  
 
 }
 ```
