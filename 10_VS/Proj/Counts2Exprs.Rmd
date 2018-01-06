@@ -837,7 +837,7 @@ merge_splits <- function(splits)
 ```{r}
 seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
 {
-  seur <- CreateSeuratObject(raw.data = my_data_init)
+  seur <- CreateSeuratObject(raw.data = mtx)
   seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
     
   seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
