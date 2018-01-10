@@ -1083,20 +1083,6 @@ seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, regress = T, 
   return(NULL)
 }
 
-merge_splits <- function(seur_obj_list)
-{
-  
-  merged <- seur_obj_list[1]
-  for(old_seur in seur_obj_list[2:length(seur_obj_list)])
-  {
-    merged <- MergeSeurat(merged)
-  }
-  
-  
-  SetClusters(object, clusters = NULL)
-  
-  return()
-}
 
 build_clustering <- function()
 {
