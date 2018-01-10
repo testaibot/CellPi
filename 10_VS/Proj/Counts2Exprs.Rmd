@@ -1038,18 +1038,20 @@ seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, ...)
   curr_mult <- NULL
   if(is.null(cluster))
   {
-    magic <- tryCatch(magic_impute(seur@raw.data), error = function(e){"e"})
+    magic <- tryCatch(magic_impute(as.matrix(seur@raw.data)), error = function(e){"e"})
     if(typeof(magic) != "character")
     {
+      print("magic")
       raw_data <- magic
     }else{
       raw_data <- seur@raw.data
     }
     curr_mult <- 1
   }else{
-    magic <- tryCatch(seur@raw.data[, get_cell_names_by_ident(seur, cluster)], error = function(e){"e"})
+    magic <- tryCatch(as.matrix(seur@raw.data[, get_cell_names_by_ident(seur, cluster)]), error = function(e){"e"})
     if(typeof(magic) != "character")
     {
+      print("magic")
       raw_data <- magic
     }else{
       raw_data <- seur@raw.data[, get_cell_names_by_ident(seur, cluster)]
