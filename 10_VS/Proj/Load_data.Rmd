@@ -65,10 +65,19 @@ names(markers) <- markers
 
 load_sce <- function(sce)
 {
-  if(!is.null(sce$cell_type1))
+  if(length(table(get_types(colnames(curr_assay)))) < ncol(sce)/2)
   {
-    colnames(sce) <- types2names(sce$cell_type1)
-  }
+    
+  }else
+    if(!is.null(sce$cell_type2))
+    {
+      colnames(sce) <- types2names(sce$cell_type1)
+    }else
+      if(!is.null(sce$cell_type1))
+      {
+        colnames(sce) <- types2names(sce$cell_type1)
+      }
+  
   
   curr_assay <-tryCatch(counts(sce), error = function(e) {})
   
@@ -86,7 +95,7 @@ load_sce <- function(sce)
 curr_assay <- rel2abs(as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.tpm.txt")))
 curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
 
-table(get_types(colnames(curr_assay)))
+
 
 curr_assay <- as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.counts.txt"))
 curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
@@ -96,6 +105,8 @@ curr_proc0 <- full_preprocess(working_path = "F:/bioinf/Sk/SingleCellRNASeq/oute
 
 curr_assay <- load_sce(readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\deng-reads.rds"))
 curr_proc1 <- full_preprocess(working_path = "F:/bioinf/Sk/SingleCellRNASeq/outer/deng-reads/", counts_mtx = curr_assay, markers = markers, clean = T)
+
+table(get_types(colnames(curr_assay)))
 
 curr_assay <- load_sce(readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\fan.rds"))
 curr_proc2 <- full_preprocess(working_path = "F:/bioinf/Sk/SingleCellRNASeq/outer/fan/", counts_mtx = curr_assay, markers = markers, clean = T)

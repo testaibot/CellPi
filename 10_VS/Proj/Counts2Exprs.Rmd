@@ -167,27 +167,48 @@ types2names <- function(types)
     return(list(org = NULL, annot = annot, genes = list(main = test_human$genes, collis = test_mouse$genes)))
   }
   
-  get_annot_db <- function(gene_names)
+  get_annot_db <- function(gene_names, org = NULL)
   {
-    gene_annot <- detect_genome(gene_names)
+    if(is.null(org))
+    {
+      gene_annot <- detect_genome(gene_names)
+      org <- gene_annot$org
+    }
+    
     db_to_use <- NULL
-    if(gene_annot$org %in% c("human", "h"))
+    if(org %in% c("human", "h"))
     {
       db_to_use <- "org.Hs.eg.db"
     }
-    if(gene_annot$org %in% c("mouse", "m"))
+    if(org %in% c("mouse", "m"))
     {
       db_to_use <- "org.Mm.eg.db"
     }
     return(db_to_use)
   }
 
-  gene_annot_convert_to <- function(gene_names, new_encoding = "ENTREZID")
+  gene_annot_convert_to <- function(gene_names, new_encoding = "ENTREZID", org = NULL, annot = NULL)
   {
-    gene_annot <- detect_genome(gene_names)
-    old_encoding <- toupper(gene_annot$annot)
+    if(is.null(annot)||is.null(org))
+    {
+      gene_annot <- detect_genome(gene_names)
+    }
+    
+    if(is.null(annot))
+    {
+      old_encoding <- toupper(gene_annot$annot)
+    }
+    else{
+      old_encoding <- toupper(annot)
+    }
+    
+    if(is.null(org))
+    {
+      org_db <- get_annot_db(gene_names)
+    }
+    
     new_encoding <- toupper(new_encoding)
-    org_db <- get_annot_db(gene_names)
+    
     if(new_encoding == old_encoding)
     {
       return (list(old = gene_names, new = gene_names))
@@ -567,30 +588,26 @@ types2names <- function(types)
       return(list(G1 = simple_preprocessing(sce_g1), G2M = simple_preprocessing(sce_g2m), S = simple_preprocessing(sce_s)))
     }
     
-    return(NULL)
+    return("e")
   }
   
-    saver_three_path_impute <- function(sce)
+    saver_two_path_impute <- function(sce)
     {
       #detection of highly variable genes to reduce impute step required time
       #combine several methods to get best result after impute step
     
       DE_genes <- detect_DE_genes(2^exprs(sce)-1)
       
-      DE_genes_magic0 <- DE_genes[seq(1, length(DE_genes),3)]
+      DE_genes_magic0 <- DE_genes[seq(1, length(DE_genes),2)]
       length(DE_genes_magic0)
       imputed_genes0 <- saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic0)
       
-      DE_genes_magic1 <- DE_genes[seq(2, length(DE_genes),3)]
+      DE_genes_magic1 <- DE_genes[seq(2, length(DE_genes),2)]
       length(DE_genes_magic1)
       imputed_genes1 <- saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic1)
       
-      DE_genes_magic2 <- DE_genes[seq(3, length(DE_genes),3)]
-      length(DE_genes_magic2)
-      imputed_genes2 <- saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic2)
       
-      
-      return(list(x = imputed_genes0, y = imputed_genes1, z = imputed_genes2))
+      return(list(x = imputed_genes0, y = imputed_genes1))
     }
 
   
@@ -642,17 +659,16 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
     sce_cycled <- tryCatch(cell_cycle_decomposed_normalization(sce), error = function(e) {"e"})
   }
   
-  print("Imputing dropouts...")
   if(typeof(sce_cycled) != "character")
   {
-    lapply(sce_cycled, dim)
+    print(lapply(sce_cycled, dim))
     if(impute)
     {
       print("SI")
-      sce_saver <- lapply(sce_cycled, saver_three_path_impute)
+      sce_saver <- lapply(sce_cycled, saver_two_path_impute)
     }else{
       print("S")
-      sce_saver <- lapply(sce_cycled, function(sce_set){return(2^simple_preprocessing(sce_set)-1)})
+      sce_saver <- lapply(sce_cycled, function(sce_set){return(2^exprs(simple_preprocessing(sce_set))-1)})
     }
   }
   else
@@ -660,7 +676,7 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
     if(impute)
     {
       print("I")
-      sce_saver <- saver_three_path_impute(sce)
+      sce_saver <- saver_two_path_impute(sce)
     }else{
       print("N")
       sce_saver <- 2^exprs(sce)-1
@@ -765,7 +781,6 @@ merge_saver_split <- function(saver_splited, lA = ".x", lB = ".y", lC = ".z")
 {
   A <- na.omit(rel2abs(saver_splited$x))
   B <- na.omit(rel2abs(saver_splited$y))
-  C <- na.omit(rel2abs(saver_splited$z))
     
   genes_all <- unique(c(rownames(A), rownames(B), rownames(C)))
       
@@ -776,13 +791,8 @@ merge_saver_split <- function(saver_splited, lA = ".x", lB = ".y", lC = ".z")
   genes_zero_B <- setdiff(genes_all, rownames(B))
   B <- add_zero_genes(B, genes_zero_B)
   colnames(B) <- sapply(1:ncol(B), function(x) {return(paste0(unlist(strsplit(colnames(B)[x], ".", fixed = TRUE))[1], lB, ".", x))})
-      
-  genes_zero_C <- setdiff(genes_all, rownames(C))
-  C <- add_zero_genes(C, genes_zero_C)
-  colnames(C) <- sapply(1:ncol(C), function(x) {return(paste0(unlist(strsplit(colnames(C)[x], ".", fixed = TRUE))[1], lC, ".", x))})
- 
         
-  E <- cbind(A[order(rownames(A)),], B[order(rownames(B)),], C[order(rownames(C)),])
+  E <- cbind(A[order(rownames(A)),], B[order(rownames(B)),])
 
   return (E)
 }
@@ -835,14 +845,132 @@ merge_splits <- function(splits)
 
 
 ```{r}
-seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
+compute_pca <- function(seur)
 {
-  seur <- CreateSeuratObject(raw.data = mtx)
-  seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
-    
-  seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
+  init_pc <- max(nrow(seur@raw.data)/120, 30)
+  end_pc <- 10
+  step <- (init_pc-end_pc)/10
   
-  #seur <- FindVariableGenes(object = seur, do.plot = F)
+  for(pc_use in unique(round(seq(init_pc, end_pc, -step))))
+  {
+    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = T),
+                      error = function(e) {"e"}, 
+                      warning = function(w) {"w"}
+                      )
+
+    if(typeof(seur1) != "character")
+    {
+      print(paste0("pc ", pc_use))
+      seur <- seur1
+      return (seur)
+    }
+  }
+  return ("e")
+}
+
+compute_tsne <- function(seur)
+{
+  init_plex <- max(ncol(seur@raw.data)/20, 30)
+  end_plex <- 2
+  step <- (init_plex-end_plex)/10
+  
+  for(perplex in unique(round(seq(init_plex, end_plex, -step))))
+  {
+    seur1 <- tryCatch(RunTSNE(object = seur, dims.use = 1:ncol(seur@dr$pca@cell.embeddings), dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
+    if(typeof(seur1) != "character")
+    {
+      print(paste0("perplex ", perplex))
+      seur <- seur1
+      break
+    }
+  }
+  return(seur)
+}
+
+compute_clustering <- function(seur, mult = 1)
+{
+  k.param <- max(round(min(30, ncol(seur@raw.data)/3)),3)
+  k.scale <- max(round(min(25, ncol(seur@raw.data)/4)),2)
+  
+  seur <- FindClusters(object = seur, algorithm = 3, k.param = k.param, k.scale = k.scale, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
+  
+  if(mult<2)
+  {
+    test_clustering_rez <- function(seur, rez)
+    {
+        s_out <- capture.output(FindClusters(object = seur, resolution = rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T))
+      
+        s_out <- unlist(strsplit(s_out[which(grepl("singletons identified", s_out))], c(" |\""), fixed = F))
+        s_out <- s_out[which(grepl("^\\d+$", s_out))][1]
+    
+      if(is.null(s_out))
+      {
+        return(0)
+      }else{
+        return(as.numeric(s_out))
+      }
+    }
+    
+    rez_curr <- "e"
+    
+    for(rez in seq(0.1, 100.1, 1))
+    {
+      if(test_clustering_rez(seur, rez)>0)
+      {
+        rez_curr <- rez
+        break
+      }
+    }
+    
+    
+    for(rez in seq(rez_curr, 0.1, -0.1))
+    {
+      if(test_clustering_rez(seur, rez)==0)
+      {
+        rez_curr <- rez
+        break
+      }
+    }
+    
+    print(paste0("rez ", rez_curr))
+    seur <- FindClusters(object = seur, resolution = rez_curr, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
+    seur1 <- ValidateClusters(seur, pc.use = 1:ncol(seur@dr$pca@cell.embeddings))
+    if(length(table(get_ident(seur1))>1)>1)
+    {
+      print("Clustered...")
+      return (seur1)
+    }else{
+      print("Clustered without correction...")
+        if(length(table(get_ident(seur))>1)>1){
+          return(seur)
+        }
+    }
+    return("e")
+  }else{
+    print("Unreliable clustering...")
+    for(rez in seq(0.1, 0.5, 0.1))
+    {
+      seur <- FindClusters(object = seur, resolution = rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
+      if(length(which(table(get_ident(seur))>1))>1){
+        print(paste0("rez ", rez))
+        return(seur)
+      }
+    }
+  }
+  return("e")
+}
+
+seurat_analyse <- function(mtx_or_seur, regress = T, regress_cc_diff = T, final_analyse = F)
+{
+  if(!final_analyse)
+  {
+    seur <- CreateSeuratObject(raw.data = as.matrix(mtx_or_seur))
+    seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
+  }else{
+    seur <- mtx_or_seur 
+  }
+  curr_mult <- get_copy_count(seur)
+  seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
     
   if(regress)
   {
@@ -870,44 +998,24 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = F)
     seur <- ScaleData(object = seur)
   }
   
-  for(pc_use in seq(100, 10,-10))
+  seur1 <- compute_pca(seur)
+  if(typeof(seur1) != "character")
   {
-    seur1 <- tryCatch(RunPCA(object = seur, pc.genes = rownames(seur@data), print.results = FALSE, pcs.print
-
- = NULL, do.print = F, pcs.compute = pc_use, rev.pca = T),
-                      error = function(e) {"e"}, 
-                      warning = function(w) {"e"}
-                      )
-    
-    if(typeof(seur1) != "character")
-    {
-      print(paste0("pc ", pc_use))
-      seur <- seur1
-      break
-    }
+    seur <- seur1
+  }else{
+    return("e")
   }
   
- 
-  #seur <- ProjectPCA(object = seur, do.print = FALSE)
+  seur <- compute_tsne(seur)
   
-  for(perplex in seq(300, 5, -5))
+  if(!final_analyse)
   {
-    seur1 <- tryCatch(RunTSNE(object = seur, dims.use = 1:ncol(seur@dr$pca@cell.embeddings), dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
+    seur1 <- compute_clustering(seur, mult = curr_mult)
     if(typeof(seur1) != "character")
     {
-      print(paste0("perplex ", perplex))
       seur <- seur1
-      break
-    }
-  }
-  
-  for(rez in seq(0.1, 0.9, 0.1))
-  {
-    seur <- FindClusters(object = seur, resolution = rez, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T)
-    if(length(table(seur@ident))>1)
-    {
-      print(paste0("rez ", rez))
-      break
+    }else{
+      return("e")
     }
   }
   
@@ -925,16 +1033,28 @@ get_copy_count <- function(seur)
   return(mult)
 }
 
-seur_find_multiplication <- function(seur, cluster = NULL, gran_shresh = 3, ...)
+seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, ...)
 {
   curr_mult <- NULL
   if(is.null(cluster))
   {
-    raw_data <- seur@raw.data
+    magic <- tryCatch(magic_impute(seur@raw.data), error = function(e){"e"})
+    if(typeof(magic) != "character")
+    {
+      raw_data <- magic
+    }else{
+      raw_data <- seur@raw.data
+    }
     curr_mult <- 1
   }else{
-    raw_data <- seur@raw.data[, get_cell_names_by_ident(seur, cluster)]
-    curr_mult <- get_copy_count(seur)+1
+    magic <- tryCatch(seur@raw.data[, get_cell_names_by_ident(seur, cluster)], error = function(e){"e"})
+    if(typeof(magic) != "character")
+    {
+      raw_data <- magic
+    }else{
+      raw_data <- seur@raw.data[, get_cell_names_by_ident(seur, cluster)]
+    }
+    curr_mult <- get_copy_count(seur)
   }
   
   for(mult in seq(curr_mult, 20, 2))
@@ -991,15 +1111,20 @@ plot_venn <- function(cl_markers)
   grid.draw(venn.plot)
 }
 
-find_markers <- function(curr_seur, p_val = 0.05, ...)
+find_markers <- function(curr_seur, p_val = 0.05, test.use = "MAST", logfc.threshold = 0.5, only.pos = T, min.pct = 0.8, min.diff.pct = 0.5)
 {
   cluster.markers <- NULL
   cluster_numbers <- NULL
+
+  
   for (ident in sort(unique(curr_seur@ident)))
   {
-    curr_len  <- length(cluster.markers)
-    
-    try(cluster.markers <- c(cluster.markers, list(ident = FindMarkers(object = curr_seur, ident.1 = ident, ...))))
+    fm <- tryCatch(FindMarkers(object = curr_seur, ident.1 = ident,  test.use = test.use, logfc.threshold = logfc.threshold, only.pos = only.pos, min.pct = min.pct, min.diff.pct = min.diff.pct), error = function(e){"e"})
+    if(typeof(fm) != "character")
+    {
+      cluster.markers <- c(cluster.markers, list(ident = fm))
+      cluster_numbers <- c(cluster_numbers, ident)
+    }
   }
   
   #filter by p_val
@@ -1008,7 +1133,6 @@ find_markers <- function(curr_seur, p_val = 0.05, ...)
     if(length(cluster.markers[i]$ident)==0){ next }
     
     cluster.markers[i]$ident <- cluster.markers[i]$ident[which(cluster.markers[i]$ident$p_val_adj<=p_val),]
-    
   }
   
   
@@ -1018,14 +1142,16 @@ find_markers <- function(curr_seur, p_val = 0.05, ...)
     if(length(cluster.markers[i]$ident)==0){
       cluster.markers.list <- c(cluster.markers.list, list(item = list()))
       next }
-    
+
+    rownames(cluster.markers[i]$ident)
+
     entrez_converted <- gene_annot_convert_to(rownames(cluster.markers[i]$ident))
     names(entrez_converted$new) <- NULL
-    
+
     cluster.markers[i]$ident <- cluster.markers[i]$ident[match(entrez_converted$old, rownames(cluster.markers[i]$ident)),]
     cluster.markers[i]$ident <- cluster.markers[i]$ident[order(cluster.markers[i]$ident$avg_logFC, decreasing = T),]
-    
-    
+
+
     cluster.markers.list <- c(cluster.markers.list, list(item = entrez_converted$new))
   }
   cl_markers <- list(cluster.markers = cluster.markers, cluster.markers.list = cluster.markers.list)
@@ -1035,15 +1161,15 @@ find_markers <- function(curr_seur, p_val = 0.05, ...)
 
 GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T)
 {
-  
+
   cluster.markers <- cl_markers$cluster.markers
   cluster.markers.list <- cl_markers$cluster.markers.list
-  
+
   names(cluster.markers.list) <- rep("item", length(cluster.markers.list))
   for (i in 1:length(cluster.markers.list))
   {
     cl_mark <- cluster.markers.list[i]$item
-    
+
     x <- enrichGO(gene=cl_mark, pvalueCutoff=0.05, qvalueCutoff=0.05, readable=T, OrgDb = get_annot_db(rownames(cluster.markers$ident)))
     if(nrow(x@result)>0)
     {
@@ -1053,7 +1179,7 @@ GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T)
     }
   }
   names(cluster.markers.list) <-  sapply(1:length(cluster.markers.list), function(cl){return(paste0("X",cl-1))})
-  
+
   res <- tryCatch(compareCluster(cluster.markers.list, fun="enrichGO", OrgDb = get_annot_db(rownames(cluster.markers$ident))), error = function(e){"e"})
     if(typeof(res) != "character")
     {
