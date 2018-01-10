@@ -960,15 +960,20 @@ compute_clustering <- function(seur, mult = 1)
   return("e")
 }
 
-seurat_analyse <- function(mtx_or_seur, regress = T, regress_cc_diff = T, final_analyse = F)
+seurat_analyse <- function(mtx, regress = T, regress_cc_diff = T, do_magic = T)
 {
-  if(!final_analyse)
+  if(do_magic)
   {
-    seur <- CreateSeuratObject(raw.data = as.matrix(mtx_or_seur))
-    seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
-  }else{
-    seur <- mtx_or_seur 
+    magic <- tryCatch(magic_impute(as.matrix(mtx)), error = function(e){"e"})
+     if(typeof(magic) != "character")
+    {
+      print("magic")
+      mtx <- magic
+    }
   }
+ 
+  seur <- CreateSeuratObject(raw.data = as.matrix(mtx))
+  seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
   curr_mult <- get_copy_count(seur)
   seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
     
@@ -1008,15 +1013,13 @@ seurat_analyse <- function(mtx_or_seur, regress = T, regress_cc_diff = T, final_
   
   seur <- compute_tsne(seur)
   
-  if(!final_analyse)
+
+   seur1 <- compute_clustering(seur, mult = curr_mult)
+  if(typeof(seur1) != "character")
   {
-    seur1 <- compute_clustering(seur, mult = curr_mult)
-    if(typeof(seur1) != "character")
-    {
-      seur <- seur1
-    }else{
-      return("e")
-    }
+    seur <- seur1
+  }else{
+    return("e")
   }
   
   return (seur)
@@ -1038,24 +1041,10 @@ seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, ...)
   curr_mult <- NULL
   if(is.null(cluster))
   {
-    magic <- tryCatch(magic_impute(as.matrix(seur@raw.data)), error = function(e){"e"})
-    if(typeof(magic) != "character")
-    {
-      print("magic")
-      raw_data <- magic
-    }else{
-      raw_data <- seur@raw.data
-    }
+    raw_data <- seur@raw.data
     curr_mult <- 1
   }else{
-    magic <- tryCatch(as.matrix(seur@raw.data[, get_cell_names_by_ident(seur, cluster)]), error = function(e){"e"})
-    if(typeof(magic) != "character")
-    {
-      print("magic")
-      raw_data <- magic
-    }else{
-      raw_data <- seur@raw.data[, get_cell_names_by_ident(seur, cluster)]
-    }
+    raw_data <- seur@raw.data[, get_cell_names_by_ident(seur, cluster)]
     curr_mult <- get_copy_count(seur)
   }
   
