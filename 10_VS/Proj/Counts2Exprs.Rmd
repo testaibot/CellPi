@@ -845,6 +845,40 @@ merge_splits <- function(splits)
 
 
 ```{r}
+
+seur_norm_regress <- function(seur, regress = T, regress_cc_diff = T)
+{
+  seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
+  seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
+    
+  if(regress)
+  {
+    genome <- detect_genome(rownames(seur@raw.data))
+    cc <- cell_cycle_markers(genome$org)
+    G2M <- gene_annot_convert_to(unique(cc$G2M$first), genome$annot)$new
+    S <- gene_annot_convert_to(unique(cc$S$first), genome$annot)$new
+    seur1 <- tryCatch(CellCycleScoring(seur, G2M, S, set.ident = F), error = function(e) {"e"})
+    
+    if(typeof(seur1) != "character")
+    {
+      seur<-seur1
+      if(regress_cc_diff)
+      {
+        seur@meta.data$CC.Difference <- seur@meta.data$S.Score - seur@meta.data$G2M.Score
+        seur <- ScaleData(object = seur, vars.to.regress = c("nUMI", "CC.Difference"), display.progress = T)
+      }
+      else{
+        seur <- ScaleData(object = seur, vars.to.regress = c("nUMI", "S.Score", "G2M.Score"), display.progress = T)
+      }
+    }else{
+      seur <- ScaleData(object = seur, vars.to.regress = c("nUMI"), display.progress = T)
+    }
+  }else{
+    seur <- ScaleData(object = seur)
+  }
+  return(seur)
+}
+
 compute_pca <- function(seur)
 {
   init_pc <- max(nrow(seur@raw.data)/120, 30)
@@ -960,9 +994,9 @@ compute_clustering <- function(seur, mult = 1)
   return("e")
 }
 
-seurat_analyse <- function(mtx, regress = T, regress_cc_diff = T, do_magic = T)
+seurat_analyse_mtx <- function(mtx, regress = T, regress_cc_diff = T, do.magic = T, do.cluster = T)
 {
-  if(do_magic)
+  if(do.magic)
   {
     magic <- tryCatch(magic_impute(as.matrix(mtx)), error = function(e){"e"})
      if(typeof(magic) != "character")
@@ -973,35 +1007,14 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = T, do_magic = T)
   }
  
   seur <- CreateSeuratObject(raw.data = as.matrix(mtx))
-  seur@meta.data[, "orig.ident"] <- get_types(colnames(seur@raw.data))
+  
+  return(seurat_analyse(seur, regress = regress, regress_cc_diff = regress_cc_diff, do.cluster = do.cluster))
+}
+
+seurat_analyse <- function(seur, regress = T, regress_cc_diff = T, do.cluster = T)
+{
+  seur <- seur_norm_regress(seur, regress = regress, regress_cc_diff = regress_cc_diff)
   curr_mult <- get_copy_count(seur)
-  seur <- NormalizeData(object = seur, normalization.method = "LogNormalize")
-    
-  if(regress)
-  {
-    genome <- detect_genome(rownames(seur@raw.data))
-    cc <- cell_cycle_markers(genome$org)
-    G2M <- gene_annot_convert_to(unique(cc$G2M$first), genome$annot)$new
-    S <- gene_annot_convert_to(unique(cc$S$first), genome$annot)$new
-    seur1 <- tryCatch(CellCycleScoring(seur, G2M, S, set.ident = F), error = function(e) {"e"})
-    
-    if(typeof(seur1) != "character")
-    {
-      seur<-seur1
-      if(regress_cc_diff)
-      {
-        seur@meta.data$CC.Difference <- seur@meta.data$S.Score - seur@meta.data$G2M.Score
-        seur <- ScaleData(object = seur, vars.to.regress = c("nUMI", "CC.Difference"), display.progress = T)
-      }
-      else{
-        seur <- ScaleData(object = seur, vars.to.regress = c("nUMI", "S.Score", "G2M.Score"), display.progress = T)
-      }
-    }else{
-      seur <- ScaleData(object = seur, vars.to.regress = c("nUMI"), display.progress = T)
-    }
-  }else{
-    seur <- ScaleData(object = seur)
-  }
   
   seur1 <- compute_pca(seur)
   if(typeof(seur1) != "character")
@@ -1013,13 +1026,16 @@ seurat_analyse <- function(mtx, regress = T, regress_cc_diff = T, do_magic = T)
   
   seur <- compute_tsne(seur)
   
-
-   seur1 <- compute_clustering(seur, mult = curr_mult)
-  if(typeof(seur1) != "character")
+  if(do.cluster)
   {
-    seur <- seur1
-  }else{
-    return("e")
+    seur1 <- compute_clustering(seur, mult = curr_mult)
+    if(typeof(seur1) != "character")
+    {
+      seur <- seur1
+    }else{
+      return("e")
+    }
+    #seur <- NumberClusters(seur)
   }
   
   return (seur)
@@ -1036,7 +1052,7 @@ get_copy_count <- function(seur)
   return(mult)
 }
 
-seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, ...)
+seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, regress = T, regress_cc_diff = T, do.magic = F)
 {
   curr_mult <- NULL
   if(is.null(cluster))
@@ -1048,10 +1064,10 @@ seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, ...)
     curr_mult <- get_copy_count(seur)
   }
   
-  for(mult in seq(curr_mult, 20, 2))
+  for(mult in seq(curr_mult, 10, 2))
   {
     print(paste0("mult ", mult))
-    seur_mult <- tryCatch(seurat_analyse(dub(raw_data, mult), ...),error = function(e) {"e"})
+    seur_mult <- tryCatch(seurat_analyse_mtx(dub(raw_data, mult), regress = regress, regress_cc_diff = regress_cc_diff, do.magic = do.magic, do.cluster = T),error = function(e) {"e"})
     if(typeof(seur_mult) != "character")
     {
       if(length(which(table(get_ident(seur_mult))>gran_shresh))>1)
@@ -1066,6 +1082,27 @@ seur_find_split <- function(seur, cluster = NULL, gran_shresh = 2, ...)
   }
   return(NULL)
 }
+
+merge_splits <- function(seur_obj_list)
+{
+  
+  merged <- seur_obj_list[1]
+  for(old_seur in seur_obj_list[2:length(seur_obj_list)])
+  {
+    merged <- MergeSeurat(merged)
+  }
+  
+  
+  SetClusters(object, clusters = NULL)
+  
+  return()
+}
+
+build_clustering <- function()
+{
+  
+}
+
 
 plot_tsn <- function(seur)
 {
@@ -1082,11 +1119,12 @@ plot_pca <- function(seur)
 }
 
 
-
 ```
 
 
 ```{r}
+
+
 
 plot_venn <- function(cl_markers)
 {

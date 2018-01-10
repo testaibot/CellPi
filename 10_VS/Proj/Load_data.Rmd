@@ -65,7 +65,7 @@ names(markers) <- markers
 
 load_sce <- function(sce)
 {
-  if(length(table(get_types(colnames(curr_assay)))) < ncol(sce)/2)
+  if(length(table(get_types(colnames(sce)))) < ncol(sce)/2)
   {
     
   }else
