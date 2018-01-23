@@ -62,25 +62,37 @@ names(markers) <- markers
 ```
 
 ```{r}
+loadCountsRds <- function(file)
+{
+  curr_path <- file.path(working_dir, file)
+  if(file.exists(curr_path))
+  {
+    expr_out<-readRDS(file = curr_path)
+    return (expr_out)
+  }else{
+    cat("Unable to find ", curr_path)
+    cat("\tPlease, change working dir or set 'clean = TRUE'")
+  }
+}
+
+
 
 load_sce <- function(sce)
 {
   if(length(table(get_types(colnames(sce)))) < ncol(sce)/2)
   {
-    
+
   }else
     if(!is.null(sce$cell_type2))
     {
-      colnames(sce) <- types2names(sce$cell_type1)
+      colnames(sce) <- types2names(sce$cell_type2)
     }else
       if(!is.null(sce$cell_type1))
       {
         colnames(sce) <- types2names(sce$cell_type1)
       }
-  
-  
-  curr_assay <-tryCatch(counts(sce), error = function(e) {})
-  
+  curr_assay <-tryCatch(counts(sce), error = function(e) {NULL})
+
   if(is.null(curr_assay))
   {
     curr_assay <- 2^exprs(sce)-1
@@ -88,13 +100,19 @@ load_sce <- function(sce)
   }else{
     print("sce_counts")
   }
-  curr_assay <- mtx_gene_annot_convert_to(curr_assay, "ENSEMBL")
   return(curr_assay)
 }
 
-curr_assay <- rel2abs(as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.tpm.txt")))
-curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
-
+# curr_assay <- as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\expressionTableDedupQC.csv"))
+# curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\", counts_mtx = curr_assay, markers = markers, clean = T, impute = T)
+# 
+# curr_assay <- rel2abs(as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.tpm.txt")))
+# curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
+# 
+# curr_assay <- as.data.frame(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\SC3\\patient1-raw.txt", header=TRUE, sep = "\t"))
+# 
+# 
+# curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
 
 
 curr_assay <- as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.counts.txt"))

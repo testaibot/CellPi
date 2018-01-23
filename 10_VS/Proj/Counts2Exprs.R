@@ -1,25 +1,25 @@
 
-```{r}
-
-  library(scater)     #main data container
-  library(scran)      #zero-inflated normalization by pooling
-  library(dropestr)   #UMI correction
-  library(SAVER)      #impute dropouts step
-  library(doParallel) #required by SAVER
-  library(monocle)    #census relative2abs used for "pseudo-spike-ins" normalization
-  library(biomaRt)    #genome annotations
-  library(M3Drop)     #find DE genes
-  library(Seurat)     #unsupervised clustering
-
-  library(VennDiagram)
-  library(gplots)
-
-  library(clusterProfiler)#GO analysis stage annotation convertercompatible with ReactomePA
-  library(ReactomePA)#GO and GSEA
-```
 
 
-```{r}
+library(scater)     #main data container
+library(scran)      #zero-inflated normalization by pooling
+library(dropestr)   #UMI correction
+library(SAVER)      #impute dropouts step
+library(doParallel) #required by SAVER
+library(monocle)    #census relative2abs used for "pseudo-spike-ins" normalization
+library(biomaRt)    #genome annotations
+library(M3Drop)     #find DE genes
+library(Seurat)     #unsupervised clustering
+
+library(VennDiagram)
+library(gplots)
+
+library(clusterProfiler)#GO analysis stage annotation convertercompatible with ReactomePA
+library(ReactomePA)#GO and GSEA
+
+
+
+
 
 types2names <- function(types)
 {
@@ -35,571 +35,571 @@ types2names <- function(types)
   return(cell_names)
 }
 
-  annot_path <- function(spec)
+annot_path <- function(spec)
+{
+  if(spec %in% c("h", "human"))
   {
-    if(spec %in% c("h", "human"))
-    {
-      return("human_cycle.rds")
-    }
-    if(spec %in% c("m", "mouse"))
-    {
-      return("mouse_cycle.rds")
-    }
+    return("human_cycle.rds")
   }
-
-  get_genome_annotation_names_mapping <- function(spec, clean = F)
+  if(spec %in% c("m", "mouse"))
   {
-    if (spec %in% c("mouse","m"))
+    return("mouse_cycle.rds")
+  }
+}
+
+get_genome_annotation_names_mapping <- function(spec, clean = F)
+{
+  if (spec %in% c("mouse","m"))
+  {
+    if(clean&&file.exists(annot_path("m")))
     {
-      if(clean&&file.exists(annot_path("m")))
+      file.remove(annot_path("m"))
+    }
+    
+    if(file.exists(annot_path("m")))
+    {
+      anno <- readRDS(annot_path("m"))
+    }
+    else
+    {
+      if(testBioCConnection())
       {
-        file.remove(annot_path("m"))
-      }
-      
-      if(file.exists(annot_path("m")))
-      {
-        anno <- readRDS(annot_path("m"))
+        anno <- getBM(attributes=c("ensembl_gene_id", "mgi_symbol", "chromosome_name"), mart=useMart("ensembl", dataset = "mmusculus_gene_ensembl"))
+        anno <- list(gene_id = anno$ensembl_gene_id, gene_symbol = anno$mgi_symbol, chr = anno$chromosome_name)
+        saveRDS(anno, file = annot_path("m"))
       }
       else
       {
-        if(testBioCConnection())
-        {
-          anno <- getBM(attributes=c("ensembl_gene_id", "mgi_symbol", "chromosome_name"), mart=useMart("ensembl", dataset = "mmusculus_gene_ensembl"))
-          anno <- list(gene_id = anno$ensembl_gene_id, gene_symbol = anno$mgi_symbol, chr = anno$chromosome_name)
-          saveRDS(anno, file = annot_path("m"))
-        }
-        else
-        {
-          print("Internet connection required to load annotation for the first time")
-          stop()
-        }
+        print("Internet connection required to load annotation for the first time")
+        stop()
       }
-      
     }
-    if (spec %in% c("human","h"))
-    { 
-      if(clean&&file.exists(annot_path("h")))
+    
+  }
+  if (spec %in% c("human","h"))
+  { 
+    if(clean&&file.exists(annot_path("h")))
+    {
+      file.remove(annot_path("h"))
+    }
+    
+    if(file.exists(annot_path("h")))
+    {
+      anno <- readRDS(annot_path("h"))
+    }
+    else
+    {
+      if(testBioCConnection())
       {
-        file.remove(annot_path("h"))
-      }
-      
-      if(file.exists(annot_path("h")))
-      {
-        anno <- readRDS(annot_path("h"))
+        anno <- getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "chromosome_name"), mart=useMart("ensembl", dataset = "hsapiens_gene_ensembl"))
+        anno <- list(ensembl_id = anno$ensembl_gene_id, gene_symbol = anno$hgnc_symbol, chr = anno$chromosome_name)
+        saveRDS(anno, file = annot_path("h"))
       }
       else
       {
-        if(testBioCConnection())
-        {
-          anno <- getBM(attributes=c("ensembl_gene_id", "hgnc_symbol", "chromosome_name"), mart=useMart("ensembl", dataset = "hsapiens_gene_ensembl"))
-          anno <- list(ensembl_id = anno$ensembl_gene_id, gene_symbol = anno$hgnc_symbol, chr = anno$chromosome_name)
-          saveRDS(anno, file = annot_path("h"))
-        }
-        else
-        {
-          print("Internet connection required to load annotation for the first time")
-          stop()
-        }
+        print("Internet connection required to load annotation for the first time")
+        stop()
       }
     }
-    return(anno)
   }
- 
+  return(anno)
+}
 
-  detect_genome <- function(gene_names)
+
+detect_genome <- function(gene_names)
+{
+  detect_genome_symbol_format <- function(gene_names, annotation)
   {
-    detect_genome_symbol_format <- function(gene_names, annotation)
-    {
-      symbol = intersect(gene_names, annotation$gene_symbol)
-      ensembl = intersect(gene_names, annotation$gene_id)
+    symbol = intersect(gene_names, annotation$gene_symbol)
+    ensembl = intersect(gene_names, annotation$gene_id)
     
-      if(length(symbol) == 0 && length(ensembl) == 0) return (NULL)
-      if(length(symbol) > length(ensembl)) return (list(annot = "symbol", genes = symbol))
-      else return (list(annot = "ensembl", genes = ensembl))
-    }
-    
-    human <- get_genome_annotation_names_mapping("h")
-    mouse <- get_genome_annotation_names_mapping("m")
-    
-    test_human <- detect_genome_symbol_format(gene_names, human)
-    test_mouse <- detect_genome_symbol_format(gene_names, mouse)
-    
-    if(is.null(test_human)&&is.null(test_mouse))
-    {
-      print("Gene symbols should be ensembl or gencode. Either mouse or human")
-      return(NULL)
-    }
-    
-    if(!is.null(test_human))
-    {
-      if(is.null(test_mouse) || length(test_mouse$genes) < length(test_human$genes))
-      {
-        return(list(org = "human", annot = test_human$annot, genes = list(main = test_human$genes, collis = test_mouse$genes)))
-      }
-    }
-    
-    if(!is.null(test_mouse))
-    {
-      if(is.null(test_human) || length(test_mouse$genes) > length(test_human$genes))
-      {
-        return(list(org = "mouse", annot = test_mouse$annot, genes = list(main = test_mouse$genes, collis = test_human$genes)))
-      }
-    }
-    
-    # annot = NULL
-    # if(!is.null(test_mouse)&&!is.null(test_mouse)&&test_mouse$annot == test_human$annot)
-    # {
-    #   annot = test_mouse$annot
-    # }
-    # else
-    # {
-    #   if(!is.null(test_human)&&is.null(test_mouse))
-    #   {
-    #     annot = test_human$annot
-    #   }
-    # 
-    #   if(!is.null(test_mouse)&&!is.null(test_human))
-    #   {
-    #     annot = test_mouse$annot
-    #   }
-    # }
-    # 
+    if(length(symbol) == 0 && length(ensembl) == 0) return (NULL)
+    if(length(symbol) > length(ensembl)) return (list(annot = "symbol", genes = symbol))
+    else return (list(annot = "ensembl", genes = ensembl))
+  }
+  
+  human <- get_genome_annotation_names_mapping("h")
+  mouse <- get_genome_annotation_names_mapping("m")
+  
+  test_human <- detect_genome_symbol_format(gene_names, human)
+  test_mouse <- detect_genome_symbol_format(gene_names, mouse)
+  
+  if(is.null(test_human)&&is.null(test_mouse))
+  {
+    print("Gene symbols should be ensembl or gencode. Either mouse or human")
     return(NULL)
   }
   
-  get_annot_db <- function(gene_names, org)
+  if(!is.null(test_human))
   {
-    db_to_use <- NULL
-    if(org %in% c("human", "h"))
+    if(is.null(test_mouse) || length(test_mouse$genes) < length(test_human$genes))
     {
-      db_to_use <- "org.Hs.eg.db"
+      return(list(org = "human", annot = test_human$annot, genes = list(main = test_human$genes, collis = test_mouse$genes)))
     }
-    if(org %in% c("mouse", "m"))
-    {
-      db_to_use <- "org.Mm.eg.db"
-    }
-    return(db_to_use)
   }
+  
+  if(!is.null(test_mouse))
+  {
+    if(is.null(test_human) || length(test_mouse$genes) > length(test_human$genes))
+    {
+      return(list(org = "mouse", annot = test_mouse$annot, genes = list(main = test_mouse$genes, collis = test_human$genes)))
+    }
+  }
+  
+  # annot = NULL
+  # if(!is.null(test_mouse)&&!is.null(test_mouse)&&test_mouse$annot == test_human$annot)
+  # {
+  #   annot = test_mouse$annot
+  # }
+  # else
+  # {
+  #   if(!is.null(test_human)&&is.null(test_mouse))
+  #   {
+  #     annot = test_human$annot
+  #   }
+  # 
+  #   if(!is.null(test_mouse)&&!is.null(test_human))
+  #   {
+  #     annot = test_mouse$annot
+  #   }
+  # }
+  # 
+  return(NULL)
+}
 
-  gene_annot_convert_to <- function(gene_names, new_encoding = "ENTREZID", org, annot)
+get_annot_db <- function(gene_names, org)
+{
+  db_to_use <- NULL
+  if(org %in% c("human", "h"))
   {
-   
-    old_encoding <- toupper(annot)
-    
-    org_db <- get_annot_db(gene_names, org)
-    
-    new_encoding <- toupper(new_encoding)
-    
-    if(new_encoding == old_encoding)
-    {
-      return (list(old = gene_names, new = gene_names))
-    }
-    gene_annot_mapping <- as.matrix(bitr(gene_names, fromType=old_encoding, toType=new_encoding, OrgDb=org_db))
-    return(list(old = gene_annot_mapping[,1], new = gene_annot_mapping[,2]))
+    db_to_use <- "org.Hs.eg.db"
   }
-  
-  mtx_gene_annot_convert_to <- function(mtx, new_encoding = "ENTREZID", org, annot)
+  if(org %in% c("mouse", "m"))
   {
-    mtx <- mtx[unique(rownames(mtx)),]
-    annot_converted <- gene_annot_convert_to(rownames(mtx), new_encoding = "ENSEMBL", org = org, annot = annot)
-    names(annot_converted$new) <- NULL
+    db_to_use <- "org.Mm.eg.db"
+  }
+  return(db_to_use)
+}
 
-    mtx <- mtx[match(annot_converted$old, rownames(mtx)),]
-    rownames(mtx) <- annot_converted$new
-    
-    mtx <- mtx[unique(rownames(mtx)),]
-    
-    return(mtx)
-  }
+gene_annot_convert_to <- function(gene_names, new_encoding = "ENTREZID", org, annot)
+{
   
-```
+  old_encoding <- toupper(annot)
+  
+  org_db <- get_annot_db(gene_names, org)
+  
+  new_encoding <- toupper(new_encoding)
+  
+  if(new_encoding == old_encoding)
+  {
+    return (list(old = gene_names, new = gene_names))
+  }
+  gene_annot_mapping <- as.matrix(bitr(gene_names, fromType=old_encoding, toType=new_encoding, OrgDb=org_db))
+  return(list(old = gene_annot_mapping[,1], new = gene_annot_mapping[,2]))
+}
 
-```{r}
+mtx_gene_annot_convert_to <- function(mtx, new_encoding = "ENTREZID", org, annot)
+{
+  mtx <- mtx[unique(rownames(mtx)),]
+  annot_converted <- gene_annot_convert_to(rownames(mtx), new_encoding = "ENSEMBL", org = org, annot = annot)
+  names(annot_converted$new) <- NULL
   
-  # presort matrix by decreasing sum of row and columns
-  # can be usefull to select top-N expressed genes
-  sort_by_rowcol_sum <- function(A)
-  {
-    gene_sum = rowSums(A)
-    cell_sum = c(colSums(A),0)
-    
-    B <-cbind(A, gene_sum)
-    B <-rbind(B, cell_sum)
-    
-    genes_ordered = order(B[,"gene_sum"], decreasing = TRUE)
-    cells_ordered = order(B["cell_sum",], decreasing = TRUE)
-    
-    B <- B[genes_ordered, cells_ordered]
-    
-    sorted <- B[-grep("cell_sum", rownames(B)), -grep("gene_sum", colnames(B))]
-    return (sorted[rowSums(sorted)>0, colSums(sorted)>0])
-  }
+  mtx <- mtx[match(annot_converted$old, rownames(mtx)),]
+  rownames(mtx) <- annot_converted$new
+  
+  mtx <- mtx[unique(rownames(mtx)),]
+  
+  return(mtx)
+}
 
-  rel2abs <- function(mtx)
+
+
+
+
+# presort matrix by decreasing sum of row and columns
+# can be usefull to select top-N expressed genes
+sort_by_rowcol_sum <- function(A)
+{
+  gene_sum = rowSums(A)
+  cell_sum = c(colSums(A),0)
+  
+  B <-cbind(A, gene_sum)
+  B <-rbind(B, cell_sum)
+  
+  genes_ordered = order(B[,"gene_sum"], decreasing = TRUE)
+  cells_ordered = order(B["cell_sum",], decreasing = TRUE)
+  
+  B <- B[genes_ordered, cells_ordered]
+  
+  sorted <- B[-grep("cell_sum", rownames(B)), -grep("gene_sum", colnames(B))]
+  return (sorted[rowSums(sorted)>0, colSums(sorted)>0])
+}
+
+rel2abs <- function(mtx)
+{
+  rel2abs_base <- function(mtx)
   {
-    rel2abs_base <- function(mtx)
-    {
-      fd <- as.matrix(rownames(mtx))
-      rownames(fd) <- fd
-      colnames(fd)[1]<-"gene_short_name"
-      
-      pd <- as.matrix(colnames(mtx))
-      rownames(pd) <- pd
-      colnames(pd)[1]<-"cell_name"
-      
-      pd <- new("AnnotatedDataFrame", data = as.data.frame(pd))
-      fd <- new("AnnotatedDataFrame", data = as.data.frame(fd))
-      
-      relative <- newCellDataSet(as.matrix(mtx),
-                                 phenoData = pd,
-                                 featureData = fd,
-                                 lowerDetectionLimit = 0.1,
-                                 expressionFamily = tobit(Lower = 0.1))
-      
-      rpc_matrix <- sort_by_rowcol_sum(na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = cores))))))
-      
-      return (rpc_matrix)
-    }
+    fd <- as.matrix(rownames(mtx))
+    rownames(fd) <- fd
+    colnames(fd)[1]<-"gene_short_name"
     
-    norm <- tryCatch(rel2abs_base(mtx), error = function(e){"e"})
-    if(typeof(norm) != "character")
-    {
-      return(norm) 
-    }
-    return(t(rel2abs_base(t(mtx))))
+    pd <- as.matrix(colnames(mtx))
+    rownames(pd) <- pd
+    colnames(pd)[1]<-"cell_name"
+    
+    pd <- new("AnnotatedDataFrame", data = as.data.frame(pd))
+    fd <- new("AnnotatedDataFrame", data = as.data.frame(fd))
+    
+    relative <- newCellDataSet(as.matrix(mtx),
+                               phenoData = pd,
+                               featureData = fd,
+                               lowerDetectionLimit = 0.1,
+                               expressionFamily = tobit(Lower = 0.1))
+    
+    rpc_matrix <- sort_by_rowcol_sum(na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = cores))))))
+    
+    return (rpc_matrix)
   }
   
-  
-  saver_impute <-function(expr, size_factors = NULL, genes = NULL, cores = parallel:::detectCores()-1)
+  norm <- tryCatch(rel2abs_base(mtx), error = function(e){"e"})
+  if(typeof(norm) != "character")
   {
-    expr_new <- sort_by_rowcol_sum(t(na.omit(t(na.omit(expr)))))
-    if(is.null(genes))
+    return(norm) 
+  }
+  return(t(rel2abs_base(t(mtx))))
+}
+
+
+saver_impute <-function(expr, size_factors = NULL, genes = NULL, cores = parallel:::detectCores()-1)
+{
+  expr_new <- sort_by_rowcol_sum(t(na.omit(t(na.omit(expr)))))
+  if(is.null(genes))
+  {
+    genes <- rownames(expr_new)
+    if(nrow(expr_new)>3000)
     {
-      genes <- rownames(expr_new)
-      if(nrow(expr_new)>3000)
-      {
-        genes <- genes[1:3000]
-      }
+      genes <- genes[1:3000]
     }
-    
-    doParallel::stopImplicitCluster()
-    doParallel::registerDoParallel(cores = cores)
-    
-    max_var <- nrow(expr_new) 
-    
-    if(is.null(size_factors))
-    {
-      impute_sorted_in <- saver(expr_new,
+  }
+  
+  doParallel::stopImplicitCluster()
+  doParallel::registerDoParallel(cores = cores)
+  
+  max_var <- nrow(expr_new) 
+  
+  if(is.null(size_factors))
+  {
+    impute_sorted_in <- saver(expr_new,
                               parallel = T, 
                               pred.genes = which(rownames(expr_new) %in% genes), 
                               nzero = max(10, ncol(expr_new)/20), 
                               dfmax = 5 #limit netglm model complexity to speed-up computations
-                                         #should not affect result too much, cuz every gene processed separately in SAVER
-                              )
-    }
-    else
-    {
-      impute_sorted_in <- saver(expr_new,
+                              #should not affect result too much, cuz every gene processed separately in SAVER
+    )
+  }
+  else
+  {
+    impute_sorted_in <- saver(expr_new,
                               parallel = T, 
                               size.factor = size_factors, 
                               pred.genes = which(rownames(expr_new) %in% genes), 
                               nzero = max(10, ncol(expr_new)/20),
                               dfmax = 5
-                              )
-    }
-    
-    doParallel::stopImplicitCluster()
-    
-    rpc_matrix_new <- t(na.omit(t(impute_sorted_in$estimate)))
-    
-    return (rpc_matrix_new)
+    )
   }
   
-  matrix_sum <- function(A, B)
+  doParallel::stopImplicitCluster()
+  
+  rpc_matrix_new <- t(na.omit(t(impute_sorted_in$estimate)))
+  
+  return (rpc_matrix_new)
+}
+
+matrix_sum <- function(A, B)
+{
+  A[rownames(B), colnames(B)] <- A[rownames(B), colnames(B)] + B[rownames(B), colnames(B)]
+  return (A)
+}
+
+load_velocity_mtx <- function(path)
+{
+  # Merge matrix of intron-exon matrix counts by gene name
+  
+  dropestOutput <- readRDS(path)
+  
+  
+  exo_mtx <- as.matrix(dropestOutput$exon)
+  intro_mtx <- as.matrix(dropestOutput$intron)
+  span_mtx <- as.matrix(dropestOutput$spanning)
+  
+  detected_genes <- unique(c(rownames(exo_mtx), rownames(intro_mtx), rownames(span_mtx)))
+  cells_count <- ncol(exo_mtx)
+  expr_all <- matrix(0, nrow = length(detected_genes), ncol = cells_count)
+  
+  rownames(expr_all) <- detected_genes
+  colnames(expr_all) <- colnames(exo_mtx)
+  
+  expr_all <- matrix_sum(expr_all, exo_mtx)
+  expr_all <- matrix_sum(expr_all, intro_mtx)
+  expr_all <- matrix_sum(expr_all, span_mtx)
+  
+  return(expr_all)
+}
+
+
+
+
+
+magic_impute <- function (mtx, components = 100)
+{
+  magicimpute2matrix<-function(M)
   {
-    A[rownames(B), colnames(B)] <- A[rownames(B), colnames(B)] + B[rownames(B), colnames(B)]
-    return (A)
+    B <- data.frame(M)
+    colnames(B) <- colnames(M)
+    rownames(B) <- M[,"X"]
+    B <- t(as.matrix(B[,which(colnames(M)!="X")]))
+    storage.mode(B) <- "numeric"
+    return (B)
   }
   
-  load_velocity_mtx <- function(path)
+  file_in <- paste0(digest::digest(curr), "_for_magic_exprs.csv")
+  file_out <- paste0(digest::digest(curr), "_magic_out.csv")
+  
+  write.csv(mtx, file = file_in)
+  
+  system(paste0('bash -c "MAGIC.py -d ', file_in, ' -o ', file_out, '  --cell-axis \'columns\' -p ', min(components, nrow(mtx)),' csv"'))
+  
+  magic_imputed <- read.csv(file = file_out)
+  
+  magic_imputed <- magicimpute2matrix(magic_imputed)
+  
+  unlink(file_in)
+  unlink(file_out)
+  
+  return (na.omit(magic_imputed))
+}
+
+
+detect_DE_genes <- function(mtx)
+{
+  Normalized_data <- M3DropCleanData(mtx,
+                                     labels = colnames(mtx),
+                                     is.counts=TRUE)
+  
+  M3Drop_genes <- M3DropGetExtremes(Normalized_data$data, fdr_threshold=0.05)
+  
+  DE_genes <- NULL
+  for(method in c("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr"))
   {
-    # Merge matrix of intron-exon matrix counts by gene name
-    
-    dropestOutput <- readRDS(path)
-
-
-    exo_mtx <- as.matrix(dropestOutput$exon)
-    intro_mtx <- as.matrix(dropestOutput$intron)
-    span_mtx <- as.matrix(dropestOutput$spanning)
-
-    detected_genes <- unique(c(rownames(exo_mtx), rownames(intro_mtx), rownames(span_mtx)))
-    cells_count <- ncol(exo_mtx)
-    expr_all <- matrix(0, nrow = length(detected_genes), ncol = cells_count)
-    
-    rownames(expr_all) <- detected_genes
-    colnames(expr_all) <- colnames(exo_mtx)
-
-    expr_all <- matrix_sum(expr_all, exo_mtx)
-    expr_all <- matrix_sum(expr_all, intro_mtx)
-    expr_all <- matrix_sum(expr_all, span_mtx)
-    
-    return(expr_all)
+    DE_genes <- c(DE_genes, rownames(M3DropDifferentialExpression(Normalized_data$data,
+                                                                  mt_method=method, mt_threshold=0.05, suppress.plot = T)))
   }
   
+  DE_genes <- unique(DE_genes, c(M3Drop_genes$left, M3Drop_genes$right))
   
+  object <- CreateSeuratObject(raw.data = mtx, min.cells = 3, min.genes = 200)
+  object <- NormalizeData(object = object, normalization.method = "LogNormalize")
+  object <- FindVariableGenes(object = object, mean.function = ExpMean, dispersion.function = LogVMR)
   
+  DE_genes <- unique(c(object@var.genes, DE_genes))
   
+  DE_genes <- DE_genes[order(rowSums(mtx[DE_genes,]), decreasing = T)]
   
-  magic_impute <- function (mtx, components = 100)
+  return(DE_genes)
+}
+
+
+
+simple_preprocessing <- function(sce, libsize = T, feature = T, mito = T, spikeIns = T)
+{
+  filter_mito <- function (sce)
   {
-    magicimpute2matrix<-function(M)
-    {
-      B <- data.frame(M)
-      colnames(B) <- colnames(M)
-      rownames(B) <- M[,"X"]
-      B <- t(as.matrix(B[,which(colnames(M)!="X")]))
-      storage.mode(B) <- "numeric"
-      return (B)
-    }
-    
-    file_in <- paste0(digest::digest(curr), "_for_magic_exprs.csv")
-    file_out <- paste0(digest::digest(curr), "_magic_out.csv")
-      
-    write.csv(mtx, file = file_in)
-  
-    system(paste0('bash -c "MAGIC.py -d ', file_in, ' -o ', file_out, '  --cell-axis \'columns\' -p ', min(components, nrow(mtx)),' csv"'))
-
-    magic_imputed <- read.csv(file = file_out)
-  
-    magic_imputed <- magicimpute2matrix(magic_imputed)
-  
-    unlink(file_in)
-    unlink(file_out)
-
-    return (na.omit(magic_imputed))
-  }
-  
-  
-  detect_DE_genes <- function(mtx)
-  {
-    Normalized_data <- M3DropCleanData(mtx,
-                   labels = colnames(mtx),
-                   is.counts=TRUE)
-
-    M3Drop_genes <- M3DropGetExtremes(Normalized_data$data, fdr_threshold=0.05)
-
-    DE_genes <- NULL
-    for(method in c("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr"))
-    {
-      DE_genes <- c(DE_genes, rownames(M3DropDifferentialExpression(Normalized_data$data,
-                         mt_method=method, mt_threshold=0.05, suppress.plot = T)))
-    }
-
-    DE_genes <- unique(DE_genes, c(M3Drop_genes$left, M3Drop_genes$right))
-  
-    object <- CreateSeuratObject(raw.data = mtx, min.cells = 3, min.genes = 200)
-    object <- NormalizeData(object = object, normalization.method = "LogNormalize")
-    object <- FindVariableGenes(object = object, mean.function = ExpMean, dispersion.function = LogVMR)
-    
-    DE_genes <- unique(c(object@var.genes, DE_genes))
-    
-    DE_genes <- DE_genes[order(rowSums(mtx[DE_genes,]), decreasing = T)]
-    
-    return(DE_genes)
-  }
-  
-
-  
-  simple_preprocessing <- function(sce, libsize = T, feature = T, mito = T, spikeIns = T)
-  {
-    filter_mito <- function (sce)
-    {
-      #MT QC
-      detected_genome <- detect_genome(rownames(sce))
-      if(is.null(detected_genome))
-      {
-        return(NULL)
-      }
-      anno <- get_genome_annotation_names_mapping(detected_genome$org)
-      #Filter unknown genes
-      is.mito <-  rownames(sce) %in% anno$gene_symbol[which(anno$chr == "MT")]
-    
-      is.mito_offline <- (grepl("^mt-", rownames(sce)) | grepl("^MT-", rownames(sce)))
-    
-      if((exists("is.mito")&&length(which(is.mito))==0)||(!exists("is.mito")))
-      {
-          is.mito <- is.mito_offline
-      }
-      return(rownames(sce)[which(is.mito)])
-    }
-    
-    filter_spikeIns <- function(sce)
-    {
-      is.spike <- (grepl("^ERCC-", rownames(sce)) | grepl("^ercc-", rownames(sce)))
-      isSpike(sce, "ercc") <- is.spike
-      return(rownames(sce)[which(is.spike)])
-    }
-    
-    sce <- calculateQCMetrics(sce, exprs_values = "counts", feature_controls = list(mt = filter_mito(sce), ercc = filter_spikeIns(sce)),
-                            cell_controls = NULL, nmads = 3, pct_feature_controls_threshold = 80)
-    
-    final_drop <- rep(F, ncol(sce))
-    
-    libsize.drop <- rep(F, ncol(sce))
-    if(libsize) {
-      libsize.drop <- isOutlier(sce$total_counts, nmads=3, type="low", log=T)
-      if(!is.na(sum(libsize.drop)))
-      {
-        final_drop <- libsize.drop|final_drop
-      }
-    }
-    
-    feature.drop <- rep(F, ncol(sce))
-    if(feature) {
-      feature.drop <- isOutlier(sce$total_features, nmads=3, type="low", log=T)
-      if(!is.na(sum(feature.drop)))
-      {
-        final_drop <- feature.drop|final_drop
-      }
-    }
-    
-    
-    mito.drop <- rep(F, ncol(sce))
-    if(mito) {
-      mito.drop <- isOutlier(sce$total_counts_mt, nmads=3, type="high", log=T)
-      if(!is.na(sum(mito.drop)))
-      {
-        final_drop <- mito.drop|final_drop
-      }
-    }
-    
-    spike.drop <- rep(F, ncol(sce))
-    if(spikeIns) {
-      spike.drop <- isOutlier(sce$total_counts_ercc, nmads=3, type="both", log=T)
-      if(!is.na(sum(spike.drop)))
-      {
-        final_drop <- spike.drop|final_drop
-      }
-    }
-    
-    sce <- sce[,!final_drop]
-    print(data.frame(ByLibSize=sum(libsize.drop), ByFeature=sum(feature.drop),
-               ByMito=sum(mito.drop), BySpike=sum(spike.drop), Remaining=ncol(sce)))
-    
-    #Computing separate size factors for spike-in transcripts if exists
-    sce1 <- tryCatch(computeSpikeFactors(sce, type="ercc", general.use=FALSE), error = function(e) {"e"})
-    if(typeof(sce1) != "character")
-    {
-      sce <- sce1
-    }
-  
-    #Deconvolution method to normalize genes with lots of zero-counts
-    sce <- get_sum_factors(sce)
-    #print(summary(sizeFactors(sce)))
-    sce <- normalise(sce)
-    
-    return(sce)
-  }
-  
-  cell_cycle_markers <- function(org)
-  {
-    pairs = NULL
-    if(org %in% c("human", "h"))
-    {
-      pairs <- readRDS(system.file("exdata", "human_cycle_markers.rds", package="scran"))
-    }
-      
-    if(org %in% c("mouse", "m"))
-    {
-      pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", package="scran"))
-    }
-    
-    return(pairs)
-  }
-  
-  cell_cycle_decomposed_normalization <- function(sce)
-  {
-    cyclone_mapping <- function(sce, org, annot)
-    {
-      annot_map <- get_genome_annotation_names_mapping(spec = org)
-      if(annot == "ensembl")
-      {
-        ensembl <- annot_map$gene_id[match(rownames(sce), annot_map$gene_id)]
-      }
-      
-      if(annot == "symbol")
-      {
-        ensembl <- annot_map$gene_id[match(rownames(sce), annot_map$gene_symbol)]
-      }
-      
-      assignments <- cyclone(sce, cell_cycle_markers(org), gene.names=ensembl)
-      return (assignments)
-    }
-    
+    #MT QC
     detected_genome <- detect_genome(rownames(sce))
-    if(is.null(detected_genome$org) || is.null(detected_genome$annot))
+    if(is.null(detected_genome))
     {
-      print("Unable to deside which organism to work with, skipping cell_cycle_decomposition step")
-    } else
+      return(NULL)
+    }
+    anno <- get_genome_annotation_names_mapping(detected_genome$org)
+    #Filter unknown genes
+    is.mito <-  rownames(sce) %in% anno$gene_symbol[which(anno$chr == "MT")]
+    
+    is.mito_offline <- (grepl("^mt-", rownames(sce)) | grepl("^MT-", rownames(sce)))
+    
+    if((exists("is.mito")&&length(which(is.mito))==0)||(!exists("is.mito")))
     {
-      assignments <- cyclone_mapping(sce, detected_genome$org, detected_genome$annot)
-      
-      sce_g1 <- sce[,which(assignments$normalized.scores$G1 >= 0.5)]
-      sce_g2m <- sce[,which(assignments$normalized.scores$G2M >= 0.5)]
-      sce_s <- sce[,which(assignments$normalized.scores$S >= 0.5)]
-      
-      return(list(G1 = simple_preprocessing(sce_g1), G2M = simple_preprocessing(sce_g2m), S = simple_preprocessing(sce_s)))
+      is.mito <- is.mito_offline
+    }
+    return(rownames(sce)[which(is.mito)])
+  }
+  
+  filter_spikeIns <- function(sce)
+  {
+    is.spike <- (grepl("^ERCC-", rownames(sce)) | grepl("^ercc-", rownames(sce)))
+    isSpike(sce, "ercc") <- is.spike
+    return(rownames(sce)[which(is.spike)])
+  }
+  
+  sce <- calculateQCMetrics(sce, exprs_values = "counts", feature_controls = list(mt = filter_mito(sce), ercc = filter_spikeIns(sce)),
+                            cell_controls = NULL, nmads = 3, pct_feature_controls_threshold = 80)
+  
+  final_drop <- rep(F, ncol(sce))
+  
+  libsize.drop <- rep(F, ncol(sce))
+  if(libsize) {
+    libsize.drop <- isOutlier(sce$total_counts, nmads=3, type="low", log=T)
+    if(!is.na(sum(libsize.drop)))
+    {
+      final_drop <- libsize.drop|final_drop
+    }
+  }
+  
+  feature.drop <- rep(F, ncol(sce))
+  if(feature) {
+    feature.drop <- isOutlier(sce$total_features, nmads=3, type="low", log=T)
+    if(!is.na(sum(feature.drop)))
+    {
+      final_drop <- feature.drop|final_drop
+    }
+  }
+  
+  
+  mito.drop <- rep(F, ncol(sce))
+  if(mito) {
+    mito.drop <- isOutlier(sce$total_counts_mt, nmads=3, type="high", log=T)
+    if(!is.na(sum(mito.drop)))
+    {
+      final_drop <- mito.drop|final_drop
+    }
+  }
+  
+  spike.drop <- rep(F, ncol(sce))
+  if(spikeIns) {
+    spike.drop <- isOutlier(sce$total_counts_ercc, nmads=3, type="both", log=T)
+    if(!is.na(sum(spike.drop)))
+    {
+      final_drop <- spike.drop|final_drop
+    }
+  }
+  
+  sce <- sce[,!final_drop]
+  print(data.frame(ByLibSize=sum(libsize.drop), ByFeature=sum(feature.drop),
+                   ByMito=sum(mito.drop), BySpike=sum(spike.drop), Remaining=ncol(sce)))
+  
+  #Computing separate size factors for spike-in transcripts if exists
+  sce1 <- tryCatch(computeSpikeFactors(sce, type="ercc", general.use=FALSE), error = function(e) {"e"})
+  if(typeof(sce1) != "character")
+  {
+    sce <- sce1
+  }
+  
+  #Deconvolution method to normalize genes with lots of zero-counts
+  sce <- get_sum_factors(sce)
+  #print(summary(sizeFactors(sce)))
+  sce <- normalise(sce)
+  
+  return(sce)
+}
+
+cell_cycle_markers <- function(org)
+{
+  pairs = NULL
+  if(org %in% c("human", "h"))
+  {
+    pairs <- readRDS(system.file("exdata", "human_cycle_markers.rds", package="scran"))
+  }
+  
+  if(org %in% c("mouse", "m"))
+  {
+    pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", package="scran"))
+  }
+  
+  return(pairs)
+}
+
+cell_cycle_decomposed_normalization <- function(sce)
+{
+  cyclone_mapping <- function(sce, org, annot)
+  {
+    annot_map <- get_genome_annotation_names_mapping(spec = org)
+    if(annot == "ensembl")
+    {
+      ensembl <- annot_map$gene_id[match(rownames(sce), annot_map$gene_id)]
     }
     
-    return("e")
-  }
-  
-  saver_two_path_impute <- function(sce)
-  {
-      #detection of highly variable genes to reduce impute step required time
-      #combine several methods to get best result after impute step
-      #undetected DE genes should be passed unimputed to MAGIC impute
-      DE_genes <- tryCatch(detect_DE_genes(2^exprs(sce)-1), error = function(e){NULL})
+    if(annot == "symbol")
+    {
+      ensembl <- annot_map$gene_id[match(rownames(sce), annot_map$gene_symbol)]
+    }
     
-      if(nrow(sce)>2000&&!is.null(DE_genes))
-      {
-        DE_genes_magic0 <- DE_genes[seq(1, length(DE_genes),2)]
-        length(DE_genes_magic0)
-        imputed_genes0 <- tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic0), error = function(e){NULL})
-        
-        DE_genes_magic1 <- DE_genes[seq(2, length(DE_genes),2)]
-        length(DE_genes_magic1)
-        imputed_genes1 <- tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic1), error = function(e){NULL})
-        
-        if(!is.null(imputed_genes0)&&!is.null(imputed_genes1))
-        {
-          return(list(x = imputed_genes0, y = imputed_genes1))
-        }
-      }else{
-        imputed_genes <- tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce)), error = function(e){NULL})
-        if(!is.null(imputed_genes))
-        {
-          return(exprs(simple_preprocessing(imputed_genes)))
-        }else{
-          print("Impute error, normalized count matrix returned")
-          return(exprs(simple_preprocessing(sce)))
-        }
-      }
+    assignments <- cyclone(sce, cell_cycle_markers(org), gene.names=ensembl)
+    return (assignments)
   }
-
   
+  detected_genome <- detect_genome(rownames(sce))
+  if(is.null(detected_genome$org) || is.null(detected_genome$annot))
+  {
+    print("Unable to deside which organism to work with, skipping cell_cycle_decomposition step")
+  } else
+  {
+    assignments <- cyclone_mapping(sce, detected_genome$org, detected_genome$annot)
+    
+    sce_g1 <- sce[,which(assignments$normalized.scores$G1 >= 0.5)]
+    sce_g2m <- sce[,which(assignments$normalized.scores$G2M >= 0.5)]
+    sce_s <- sce[,which(assignments$normalized.scores$S >= 0.5)]
+    
+    return(list(G1 = simple_preprocessing(sce_g1), G2M = simple_preprocessing(sce_g2m), S = simple_preprocessing(sce_s)))
+  }
+  
+  return("e")
+}
+
+saver_two_path_impute <- function(sce)
+{
+  #detection of highly variable genes to reduce impute step required time
+  #combine several methods to get best result after impute step
+  #undetected DE genes should be passed unimputed to MAGIC impute
+  DE_genes <- tryCatch(detect_DE_genes(2^exprs(sce)-1), error = function(e){NULL})
+  
+  if(nrow(sce)>2000&&!is.null(DE_genes))
+  {
+    DE_genes_magic0 <- DE_genes[seq(1, length(DE_genes),2)]
+    length(DE_genes_magic0)
+    imputed_genes0 <- tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic0), error = function(e){NULL})
+    
+    DE_genes_magic1 <- DE_genes[seq(2, length(DE_genes),2)]
+    length(DE_genes_magic1)
+    imputed_genes1 <- tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce), genes = DE_genes_magic1), error = function(e){NULL})
+    
+    if(!is.null(imputed_genes0)&&!is.null(imputed_genes1))
+    {
+      return(list(x = imputed_genes0, y = imputed_genes1))
+    }
+  }else{
+    imputed_genes <- tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce)), error = function(e){NULL})
+    if(!is.null(imputed_genes))
+    {
+      return(exprs(simple_preprocessing(imputed_genes)))
+    }else{
+      print("Impute error, normalized count matrix returned")
+      return(exprs(simple_preprocessing(sce)))
+    }
+  }
+}
+
+
 get_sum_factors <- function(sce)
 {
   min_l <- max(2, ncol(sce)/100)
   max_l <- min(ncol(sce)/10, 100)
   norm_levels <- unique(round(seq(min_l, max_l, (max_l - min_l)/10)))
-
+  
   sce <- tryCatch(computeSumFactors(sce, sizes=norm_levels, positive = F),
                   warning = function(w)
                   {computeSumFactors(sce, sizes=norm_levels, positive = T)})
   return (sce)
 }
-  
+
 sce_norm <- function (mtx)
 {
   filter_simple <- function(sce, numgenes = 10, numcells = 2, lowerDetectionLimit_gene = 1, lowerDetectionLimit_cell = 1)
@@ -607,33 +607,33 @@ sce_norm <- function (mtx)
     #Simple quality control on the cells
     keep_feature <- rowSums(counts(sce) > 0) > 0
     sce <- sce[keep_feature,]
-
+    
     numcells <- nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_cell, byrow=T)
     keep.gene <- numcells >= numcells
-
+    
     numgenes <- nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_gene, byrow=F)
     keep.cell <- numgenes >= numgenes
-
+    
     sce <- sce[keep.gene, keep.cell]
     return(sce)
   }
-
+  
   sce_temp <- SingleCellExperiment(assays = list(counts = mtx))
   sce_temp <- filter_simple(sce_temp)
-
+  
   sce_temp <- get_sum_factors(sce_temp)
-
+  
   summary(sizeFactors(sce_temp))
   sce_temp<-normalize(sce_temp)
   return (sce_temp)
 }
-  
+
 full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle = T, impute = F, markers = NULL, clean = FALSE)
 {
   print("Loading data...")
   dir.create(working_path, showWarnings = FALSE)
   setwd(working_path)
-
+  
   counts_input <- NULL
   # Reuse final results if computed
   if(clean)
@@ -657,7 +657,7 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
     return(exprs(sce))
   }
   print("Cell cycle classification...")
-
+  
   sce_cycled <- "e"
   if(cell_cycle)
   {
@@ -693,38 +693,38 @@ full_preprocess <- function(working_path = NULL, counts_mtx = NULL, cell_cycle =
   saveRDS(sce_saver, file = "counts_final.rds")
   return(sce_saver)
 }
-```
 
 
-```{r}
-  add_zero_genes <- function (mtx, gene_list)
-  {
-    new_extent <- matrix(0L, nrow = length(gene_list), ncol = ncol(mtx))
-    rownames(new_extent) <- gene_list
-    mtx <- rbind(mtx, new_extent)
-    return(mtx[order(rownames(mtx)),])
-  }
-
-  m_bind <- function(A, B, lA = "", lB = "", lAe = "", lBe = "")
-  { 
-    genes_all <- unique(c(rownames(A), rownames(B)))
-    
-    genes_zero_A <- setdiff(genes_all, rownames(A))
-    A <- add_zero_genes(A, genes_zero_A)
-    colnames(A) <- sapply(1:ncol(A), function(x) {return(paste0(lA, unlist(strsplit(colnames(A)[x], ".", fixed = TRUE))[1], lAe, ".", x))})
-    
-    genes_zero_B <- setdiff(genes_all, rownames(B))
-    B <- add_zero_genes(B, genes_zero_B)
-    colnames(B) <- sapply(1:ncol(B), function(x) {return(paste0(lB, unlist(strsplit(colnames(B)[x], ".", fixed = TRUE))[1], lBe, ".", x))})
-    
-    C <- cbind(A[order(rownames(A)),], B[order(rownames(B)),])
-    
-    return (C)
-  }
-```
 
 
-```{r}
+add_zero_genes <- function (mtx, gene_list)
+{
+  new_extent <- matrix(0L, nrow = length(gene_list), ncol = ncol(mtx))
+  rownames(new_extent) <- gene_list
+  mtx <- rbind(mtx, new_extent)
+  return(mtx[order(rownames(mtx)),])
+}
+
+m_bind <- function(A, B, lA = "", lB = "", lAe = "", lBe = "")
+{ 
+  genes_all <- unique(c(rownames(A), rownames(B)))
+  
+  genes_zero_A <- setdiff(genes_all, rownames(A))
+  A <- add_zero_genes(A, genes_zero_A)
+  colnames(A) <- sapply(1:ncol(A), function(x) {return(paste0(lA, unlist(strsplit(colnames(A)[x], ".", fixed = TRUE))[1], lAe, ".", x))})
+  
+  genes_zero_B <- setdiff(genes_all, rownames(B))
+  B <- add_zero_genes(B, genes_zero_B)
+  colnames(B) <- sapply(1:ncol(B), function(x) {return(paste0(lB, unlist(strsplit(colnames(B)[x], ".", fixed = TRUE))[1], lBe, ".", x))})
+  
+  C <- cbind(A[order(rownames(A)),], B[order(rownames(B)),])
+  
+  return (C)
+}
+
+
+
+
 get_types <- function(arr)
 {
   return(sapply(arr, function(cell) { return(unlist(strsplit(cell, ".", fixed = T))[1])}))
@@ -742,7 +742,7 @@ dub <- function(dataset_ex, copy_times = 0, transposed = F)
   temp_names <- colnames(dataset_ex)
   if(copy_times==0 || copy_times==1)
   {
-     return(dataset_ex)
+    return(dataset_ex)
   }
   
   for (i in 1:(copy_times-1))
@@ -757,7 +757,7 @@ dub <- function(dataset_ex, copy_times = 0, transposed = F)
   }else{
     
   }
-
+  
 }
 
 get_cell_names_by_ident <- function(object, clusters)
@@ -789,28 +789,28 @@ get_orig_ident <- function(object, types = NULL)
   return(ident)
 } 
 
-```
 
-```{r}
+
+
 
 
 merge_saver_split <- function(saver_splited, lA = ".x", lB = ".y", lC = ".z")
 {
   A <- saver_splited$x
   B <- saver_splited$y
-    
+  
   genes_all <- unique(c(rownames(A), rownames(B), rownames(C)))
-      
+  
   genes_zero_A <- setdiff(genes_all, rownames(A))
   A <- add_zero_genes(A, genes_zero_A)
   colnames(A) <- sapply(1:ncol(A), function(x) {return(paste0(unlist(strsplit(colnames(A)[x], ".", fixed = TRUE))[1], lA, ".", x))})
-    
+  
   genes_zero_B <- setdiff(genes_all, rownames(B))
   B <- add_zero_genes(B, genes_zero_B)
   colnames(B) <- sapply(1:ncol(B), function(x) {return(paste0(unlist(strsplit(colnames(B)[x], ".", fixed = TRUE))[1], lB, ".", x))})
-        
+  
   E <- cbind(A[order(rownames(A)),], B[order(rownames(B)),])
-
+  
   return (E)
 }
 
@@ -827,11 +827,11 @@ merge_cycle <- function(cycle_splited, lA = ".g1", lB = ".g2m", lC = ".s")
     C <- cycle_splited$S
   }
   genes_all <- unique(c(rownames(A), rownames(B), rownames(C)))
-    
+  
   genes_zero_A <- setdiff(genes_all, rownames(A))
   A <- add_zero_genes(A, genes_zero_A)
   colnames(A) <- sapply(1:ncol(A), function(x) {return(paste0(unlist(strsplit(colnames(A)[x], ".", fixed = TRUE))[1], lA, ".", x))})
-    
+  
   genes_zero_B <- setdiff(genes_all, rownames(B))
   B <- add_zero_genes(B, genes_zero_B)
   colnames(B) <- sapply(1:ncol(B), function(x) {return(paste0(unlist(strsplit(colnames(B)[x], ".", fixed = TRUE))[1], lB, ".", x))})
@@ -839,7 +839,7 @@ merge_cycle <- function(cycle_splited, lA = ".g1", lB = ".g2m", lC = ".s")
   genes_zero_C <- setdiff(genes_all, rownames(C))
   C <- add_zero_genes(C, genes_zero_C)
   colnames(C) <- sapply(1:ncol(C), function(x) {return(paste0(unlist(strsplit(colnames(C)[x], ".", fixed = TRUE))[1], lC, ".", x))})
-    
+  
   E <- cbind(A[order(rownames(A)),], B[order(rownames(B)),], C[order(rownames(C)),])
   return(E)
 }
@@ -858,10 +858,10 @@ merge_splits <- function(splits)
 }
 
 
-```
 
 
-```{r}
+
+
 
 find_cell_cycle_genes <- function(object)
 {
@@ -916,9 +916,9 @@ compute_pca <- function(object)
   {
     print(pc_use)
     object1 <- tryCatch(RunPCA(object = object, pc.genes = rownames(object@data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
-                      error = function(e) {"e"}, 
-                      warning = function(w) {"w"}
-                      )
+                        error = function(e) {"e"}, 
+                        warning = function(w) {"w"}
+    )
     
     if(typeof(object1) != "character")
     {
@@ -997,7 +997,7 @@ compute_clustering_min <- function(object, gran_shresh = 2, strict_binary = T)
       if(direction > 0)
       {
         if(is.null(test_rez)){
-            return(NULL)
+          return(NULL)
         }else if (test_rez==2) {
           next
         }else if (test_rez==0) {
@@ -1030,7 +1030,7 @@ compute_clustering_min <- function(object, gran_shresh = 2, strict_binary = T)
         }
       }
     }
-
+    
     if(test_rez==0 || (!strict_binary&&test_rez==1))
     {
       break
@@ -1130,13 +1130,13 @@ seurat_analyse_mtx <- function(mtx, regress = F, regress_cc_diff = F, do.magic =
   if(do.magic)
   {
     magic <- tryCatch(magic_impute(as.matrix(mtx)), error = function(e){"e"})
-     if(typeof(magic) != "character")
+    if(typeof(magic) != "character")
     {
       print("magic")
       mtx <- magic
     }
   }
- 
+  
   object <- CreateSeuratObject(raw.data = as(mtx, "dgCMatrix"))
   
   return(seurat_analyse(object, regress = regress, regress_cc_diff = regress_cc_diff, do.cluster = do.cluster))
@@ -1224,7 +1224,7 @@ seur_find_split <- function(object)
   regress_cc_diff = object$regress_cc_diff
   do.magic = object$do.magic
   raw_data = object$object
-    
+  
   
   curr_mult <- get_copy_count(raw_data)
   if((!is.null(ident) && pick_last_char(toString(ident)) != "f") || is.null(ident) || ncol(raw_data)>=gran_shresh*2)
@@ -1281,10 +1281,10 @@ split_ident <- function(object, ident = NULL, gran_shresh = 2, regress = F, regr
 split_all_ident <- function(object, gran_shresh = 2, regress = F, regress_cc_diff = F, do.magic = F)
 {
   parallel_params_list <- lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc_diff = regress_cc_diff, do.magic = do.magic)})
-
+  
   cl <- makeCluster(min(parallel::detectCores()-1, length(parallel_params_list)))
   doParallel::registerDoParallel(cl)
-
+  
   #clusterExport(cl=cl, varlist=c("object", "do.magic"), envir = environment())
   
   object_list <- parLapply(cl, parallel_params_list, function(param_list_for_ident){
@@ -1293,7 +1293,7 @@ split_all_ident <- function(object, gran_shresh = 2, regress = F, regress_cc_dif
     return(output)
   })
   stopCluster(cl)
-
+  
   return(object_list)
 }
 
@@ -1312,10 +1312,10 @@ seur_merge <- function(list_seur)
   #temp_object <- compute_tsne(temp_object)
   return (temp_object)
 }
-```
 
 
-```{r}
+
+
 
 plot_seur<- function(object, method = "tsne")
 {
@@ -1325,12 +1325,12 @@ plot_seur<- function(object, method = "tsne")
     p2 <- TSNEPlot(object = object, do.return = TRUE, pt.size = 1.5)
     plot_grid(p1, p2)
   }else
-  if(method == "pca")
-  {
-    p1 <- PCAPlot(object = object, group.by = "orig.ident", dim.1 = 1, dim.2 = 2, do.return = TRUE, pt.size = 1.5)
-    p2 <- PCAPlot(object = object, do.return = TRUE, dim.1 = 1, dim.2 = 2, pt.size = 1.5)
-    plot_grid(p1, p2)
-  }
+    if(method == "pca")
+    {
+      p1 <- PCAPlot(object = object, group.by = "orig.ident", dim.1 = 1, dim.2 = 2, do.return = TRUE, pt.size = 1.5)
+      p2 <- PCAPlot(object = object, do.return = TRUE, dim.1 = 1, dim.2 = 2, pt.size = 1.5)
+      plot_grid(p1, p2)
+    }
 }
 
 
@@ -1338,13 +1338,13 @@ plot_venn <- function(cl_markers)
 {
   VENN.LIST <- cl_markers$cluster.markers.list[1:min(5, length(cl_markers$cluster.markers))]
   VENN.LIST <- lapply(VENN.LIST, sort)
-
+  
   names(VENN.LIST) <- (1:min(5, length(cl_markers$cluster.markers)))-1
   grid.newpage()
   venn.plot <- venn.diagram(VENN.LIST, NULL, fill=rainbow(length(names(VENN.LIST))), 
-                             alpha=rep(0.5,length(names(VENN.LIST))), cex = 2, cat.fontface=4, 
-                             category.names=names(VENN.LIST), main="DE Genes Inters")
- 
+                            alpha=rep(0.5,length(names(VENN.LIST))), cex = 2, cat.fontface=4, 
+                            category.names=names(VENN.LIST), main="DE Genes Inters")
+  
   grid.draw(venn.plot)
 }
 
@@ -1378,16 +1378,16 @@ find_markers <- function(object, p_val = 0.05, test.use = "MAST", logfc.threshol
     if(length(cluster.markers[i]$ident)==0){
       cluster.markers.list <- c(cluster.markers.list, list(item = list()))
       next }
-
+    
     genome<-detect_genome(rownames(cluster.markers[i]$ident))
     if(!is.null(genome))
     {
       entrez_converted <- gene_annot_convert_to(rownames(cluster.markers[i]$ident), org = genome$org, annot = genome$annot)
       names(entrez_converted$new) <- NULL
-  
+      
       cluster.markers[i]$ident <- cluster.markers[i]$ident[match(entrez_converted$old, rownames(cluster.markers[i]$ident)),]
       cluster.markers.list <- c(cluster.markers.list, list(item = entrez_converted$new))
-    
+      
     }
     cluster.markers[i]$ident <- cluster.markers[i]$ident[order(cluster.markers[i]$ident$avg_logFC, decreasing = T),]
   }
@@ -1398,15 +1398,15 @@ find_markers <- function(object, p_val = 0.05, test.use = "MAST", logfc.threshol
 
 GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T, org = "m")
 {
-
+  
   cluster.markers <- cl_markers$cluster.markers
   cluster.markers.list <- cl_markers$cluster.markers.list
-
+  
   names(cluster.markers.list) <- rep("item", length(cluster.markers.list))
   for (i in 1:length(cluster.markers.list))
   {
     cl_mark <- cluster.markers.list[i]$item
-
+    
     x <- enrichGO(gene=cl_mark, pvalueCutoff=0.05, qvalueCutoff=0.05, readable=T, OrgDb = get_annot_db(rownames(cluster.markers$ident), org = org))
     if(nrow(x@result)>0)
     {
@@ -1416,12 +1416,12 @@ GO_enr <- function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T, org =
     }
   }
   names(cluster.markers.list) <-  sapply(1:length(cluster.markers.list), function(cl){return(paste0("X",cl-1))})
-
+  
   res <- tryCatch(compareCluster(cluster.markers.list, fun="enrichGO", OrgDb = get_annot_db(rownames(cluster.markers$ident))), error = function(e){"e"})
-    if(typeof(res) != "character")
-    {
-      plot(res, showCategory=20)
-    }
+  if(typeof(res) != "character")
+  {
+    plot(res, showCategory=20)
+  }
 }
 
 sort_diag <- function(object)
@@ -1430,17 +1430,17 @@ sort_diag <- function(object)
 }
 
 
-```
 
-```{r}
+
+
 plot_seur_3d <- function(object, method = "tsne", radius = 0.3, old_ident = NULL)
 {
   library(plyr)
   library(scatterplot3d)
   library(rgl)
-   
+  
   object <- RunTSNE(object = object, check_duplicates = FALSE, dim.embed = 3)
-    
+  
   if(method == "tsne")
   {
     rl <- cbind(
@@ -1449,7 +1449,7 @@ plot_seur_3d <- function(object, method = "tsne", radius = 0.3, old_ident = NULL
       object@dr$tsne@cell.embeddings[,3]
     )
   }
-     
+  
   if(method == "pca")
   {
     rl <- cbind(
@@ -1457,19 +1457,19 @@ plot_seur_3d <- function(object, method = "tsne", radius = 0.3, old_ident = NULL
       object@dr$pca@cell.embeddings[,2],
       object@dr$pca@cell.embeddings[,3]
     ) 
-      
+    
   }
-
+  
   curr_labels <- object@ident
   cells_lab <- unique(curr_labels)
   labels_uniq <- data.frame(names = cells_lab, colors =  rainbow(length(cells_lab)))
-
+  
   mfrow3d(1, 2)
   next3d()
   plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=radius)
   legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=2, pch = 0.1)
   next3d()
-
+  
   if(is.null(old_ident))
   {
     curr_labels <- object@meta.data$orig.ident
@@ -1479,9 +1479,8 @@ plot_seur_3d <- function(object, method = "tsne", radius = 0.3, old_ident = NULL
   
   cells_lab <- unique(curr_labels)
   labels_uniq <- data.frame(names = cells_lab, colors =  rainbow(length(cells_lab)))
-
+  
   plot3d(x = rl[,1], y = rl[,2], z = rl[,3], col = mapvalues(curr_labels, from = array(labels_uniq$names), to = array(labels_uniq$colors)), type="s", radius=radius)
   legend3d("topright", col = array(labels_uniq$colors), legend=labels_uniq$names, cex=2, pch = 0.1)  
-
+  
 }
-```

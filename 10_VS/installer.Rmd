@@ -8,25 +8,30 @@ ipak <- function(pkg, repository = c("CRAN", "Bioconductor", "github")) {
         }
         if (repository == "Bioconductor") {
             source("https://bioconductor.org/biocLite.R")
-            biocLite(new.pkg, dependencies = TRUE, ask = FALSE)
+            biocLite(new.pkg, dependencies = TRUE, ask = FALSE, type="source")
         }
         if (repository == "github") {
-            devtools::install_github(pkg, build_vignettes = FALSE)
+            devtools::install_github(pkg, build_vignettes = FALSE, force = TRUE) 
         }
     }
 }
 
 #CRAN packages
-cranpackages <- c("data.table")
+cranpackages <- c("data.table", "devtools")
 ipak(cranpackages, repository = "CRAN")
 
 # BIOCONDUCTOR packages
-biocpackages <- c("scater", "BiocGenerics", "survival","DelayedArray","scran","biomaRt","monocle","edgeR","tools","pastecs","plotrix","FNN","rsvd","Matrix","RColorBrewer","M3Drop","VennDiagram","MAST","ggplot2","GenomicRanges","ReactomePA","clusterProfiler", "devtools", "pathview", "limSolve")
+biocpackages <- c("scater", "BiocGenerics", "survival","DelayedArray","scran","biomaRt","monocle","edgeR","tools","pastecs","plotrix","FNN","rsvd","Matrix","RColorBrewer","M3Drop","VennDiagram","MAST","ggplot2","GenomicRanges","ReactomePA","clusterProfiler", "pathview", "limSolve")
 ipak(biocpackages, repository = "Bioconductor")
 
 # GITHUB packages
-githubpackages <- c("RcppCore/Rcpp", "mohuangx/SAVER", "satijalab/seurat")
+githubpackages <- c("mohuangx/SAVER", "satijalab/seurat")
 ipak(githubpackages, repository = "github")
+ 
 ```
 
+
+```{r}
+devtools::install_github("jingshuw/descend")
+```
 
