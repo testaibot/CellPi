@@ -2,18 +2,115 @@
 
 ```{r}
 #load to seurat
-my_data_init <- CreateSeuratObject(raw.data = curr_proc4)
-seur <- split_ident(my_data_init)
+colnames(curr_proc) <- sapply(colnames(curr_proc), function(name) {paste0("old",name)})
+colnames(curr_proc1) <- sapply(colnames(curr_proc1), function(name) {paste0("new",name)})
 
-library(SC3)
-sce <- readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
-sce <- sc3(sce, ks = c(16), biology = F, gene_filter = T)
+
+seur_old <- split_ident(CreateSeuratObject(raw.data = curr_proc), regress = T, regress_cc = "cc_diff", do.magic = T)
+
+seur_new <- split_ident(CreateSeuratObject(raw.data = curr_proc1), regress = T, regress_cc = "cc_diff", do.magic = T)
+
+merged_seur <- seur_merge(list(seur_new, seur_old))
+
+merged_seur <- split_ident(merged_seur, regress = T, regress_cc = "cc_diff", do.magic = T)
+
+# library(SC3)
+# sce <- readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
+# sce <- sc3(sce, ks = c(16), biology = F, gene_filter = T)
+
+plot_seur(seur_old)
+plot_seur(seur_new)
 
 #sc3_interactive(sce)
 ```
 
 ```{r}
-object_list <- split_all_ident(seur, do.magic = F)
+
+seqwell <- NormalizeData(object = seur_old)
+seqwell <- ScaleData(object = seqwell, vars.to.regress = c("nUMI"), display.progress = T)
+seqwell <- FindVariableGenes(object = seqwell, do.plot = FALSE)
+
+
+tenx <- NormalizeData(object = seur_new)
+tenx <- ScaleData(object = tenx, vars.to.regress = c("nUMI"), display.progress = T)
+tenx <- FindVariableGenes(object = tenx, do.plot = FALSE)
+
+# we will take the union of the top 2k variable genes in each dataset for
+# alignment note that we use 1k genes in the manuscript examples, you can
+# try this here with negligible changes to the overall results
+hvg.seqwell <- rownames(x = head(x = seqwell@hvg.info, n = 2000))
+hvg.tenx <- rownames(x = head(x = tenx@hvg.info, n = 2000))
+hvg.union <- union(x = hvg.seqwell, y = hvg.tenx)
+
+# lastly, we set the 'protocol' in each dataset for easy identification
+# later it will be transferred to the merged object in RunCCA
+tenx@meta.data[, "protocol"] <- "10X"
+seqwell@meta.data[, "protocol"] <- "SeqWell"
+
+pbmc <- RunCCA(object = tenx, object2 = seqwell, genes.use = hvg.union)
+
+
+
+```
+
+
+```{r}
+pbmc <- AlignSubspace(object = pbmc, reduction.type = "cca", grouping.var = "protocol", 
+    dims.align = 1:20, num.genes = 100)
+```
+
+
+```{r}
+pbmc <- RunPCA(pbmc, reduction.use = "cca")
+DimPlot(object = pbmc, reduction.use = "pca", group.by = "orig.ident", pt.size = 5, dim.1 = 1, dim.2 = 2,
+    do.return = TRUE)
+pbmc <- RunTSNE(pbmc, reduction.use = "cca")
+DimPlot(object = pbmc, reduction.use = "tsne", group.by = "orig.ident", pt.size = 5, 
+    do.return = TRUE)
+DimPlot(object = pbmc, reduction.use = "cca", group.by = "orig.ident", pt.size = 5, 
+    do.return = TRUE)
+
+pbmc <- RunPCA(pbmc, reduction.use = "cca.aligned")
+DimPlot(object = pbmc, reduction.use = "pca", group.by = "orig.ident", pt.size = 5, dim.1 = 1, dim.2 = 2,
+    do.return = TRUE)
+pbmc <- RunTSNE(pbmc, reduction.use = "cca.aligned")
+DimPlot(object = pbmc, reduction.use = "tsne", group.by = "orig.ident", pt.size = 5, 
+    do.return = TRUE)
+DimPlot(object = pbmc, reduction.use = "cca.aligned", group.by = "orig.ident", pt.size = 5, 
+    do.return = TRUE)
+```
+
+
+
+```{r}
+
+
+pbmc <- RunTSNE(object = pbmc, reduction.use = "cca.aligned", dims.use = 1:20, 
+    do.fast = TRUE)
+
+pbmc <- FindClusters(object = pbmc, reduction.type = "cca.aligned", dims.use = 1:20, 
+    save.SNN = TRUE)
+p1 <- TSNEPlot(object = pbmc, group.by = "protocol", do.return = TRUE, pt.size = 0.5)
+p2 <- TSNEPlot(object = pbmc, do.return = TRUE, pt.size = 0.5)
+plot_grid(p1, p2)
+
+
+seur_new <- split_ident(pbmc)
+plot_seur(pbmc, "pca")
+```
+
+
+```{r}
+table(get_types(colnames(old)))
+table(get_types(colnames(new)))
+
+table(get_orig_ident(seur_old))
+table(get_orig_ident(seur_new))
+```
+
+
+```{r}
+object_list <- split_all_ident(seur_new, do.magic = F)
 merged_seur <- seur_merge(object_list)
 object_list1 <- split_all_ident(merged_seur, do.magic = F)
 merged_seur1 <- seur_merge(object_list1)
@@ -35,7 +132,7 @@ object_list3
 
 ```{r}
 
-sort_diag(table(get_orig_ident(merged_seur3), get_ident(merged_seur3)))
+sort_diag(table(get_orig_ident(merged_seur2), get_ident(merged_seur2)))
 
 #go to prev chunk
 #curr <- seur_1
@@ -57,8 +154,8 @@ sort_diag(tab)
 plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)
 
-curr <- merged_seur2
-tab <- table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 4))
+curr <- merged_seur
+tab <- table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 3))
 sort_diag(tab)
 plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)

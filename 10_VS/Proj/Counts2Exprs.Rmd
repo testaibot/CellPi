@@ -180,7 +180,7 @@ types2names <- function(types)
     }
     return(db_to_use)
   }
-
+  
   gene_annot_convert_to <- function(gene_names, new_encoding = "ENTREZID", org, annot)
   {
    
@@ -189,11 +189,12 @@ types2names <- function(types)
     org_db <- get_annot_db(gene_names, org)
     
     new_encoding <- toupper(new_encoding)
-    
+
     if(new_encoding == old_encoding)
     {
       return (list(old = gene_names, new = gene_names))
     }
+    
     gene_annot_mapping <- as.matrix(bitr(gene_names, fromType=old_encoding, toType=new_encoding, OrgDb=org_db))
     return(list(old = gene_annot_mapping[,1], new = gene_annot_mapping[,2]))
   }
@@ -346,10 +347,6 @@ types2names <- function(types)
     return(expr_all)
   }
   
-  
-  
-  
-  
   magic_impute <- function (mtx, components = 100)
   {
     magicimpute2matrix<-function(M)
@@ -362,16 +359,16 @@ types2names <- function(types)
       return (B)
     }
     
-    file_in <- paste0(digest::digest(curr), "_for_magic_exprs.csv")
-    file_out <- paste0(digest::digest(curr), "_magic_out.csv")
+    file_in <- paste0(digest::digest(mtx), "_for_magic_exprs.csv")
+    file_out <- paste0(digest::digest(mtx), "_magic_out.csv")
       
     write.csv(mtx, file = file_in)
   
-    system(paste0('bash -c "MAGIC.py -d ', file_in, ' -o ', file_out, '  --cell-axis \'columns\' -p ', min(components, nrow(mtx)),' csv"'))
+    system(paste0('bash -c "MAGIC.py -d ', file_in, ' -o ', file_out, '  --cell-axis \'columns\' -n -p ', min(components, nrow(mtx)),' csv"'))
 
     magic_imputed <- read.csv(file = file_out)
   
-    magic_imputed <- magicimpute2matrix(magic_imputed)
+    magic_imputed <- rel2abs(magicimpute2matrix(magic_imputed))
   
     unlink(file_in)
     unlink(file_out)
@@ -755,9 +752,8 @@ dub <- function(dataset_ex, copy_times = 0, transposed = F)
   {
     return(t(dataset_ex))
   }else{
-    
+    return(dataset_ex)
   }
-
 }
 
 get_cell_names_by_ident <- function(object, clusters)
@@ -863,7 +859,7 @@ merge_splits <- function(splits)
 
 ```{r}
 
-find_cell_cycle_genes <- function(object)
+try_assign_cell_cycle <- function(object)
 {
   genome <- detect_genome(rownames(object@raw.data))
   if(is.null(genome))
@@ -871,38 +867,47 @@ find_cell_cycle_genes <- function(object)
     return(NULL)
   }
   cc <- cell_cycle_markers(genome$org)
-  G2M <- gene_annot_convert_to(unique(cc$G2M$first), "ENSEMBL", org = genome$org, annot = genome$annot)$new
-  S <- gene_annot_convert_to(unique(cc$S$first), "ENSEMBL", org = genome$org, annot = genome$annot)$new
+  G2M <- gene_annot_convert_to(unique(cc$G2M$first), new_encoding = genome$annot, org = genome$org, annot = "ENSEMBL")$new
+  S <- gene_annot_convert_to(unique(cc$S$first), new_encoding = genome$annot, org = genome$org, annot = "ENSEMBL")$new
   object1 <- tryCatch(CellCycleScoring(object, G2M, S, set.ident = F), error = function(e){NULL})
   return(object1)
 }
 
-seur_norm_regress <- function(object, regress = F, regress_cc_diff = F)
+seur_norm_regress <- function(object, regress, regress_cc)
 {
   object@meta.data[, "orig.ident"] <- get_types(colnames(object@raw.data))
   object <- NormalizeData(object = object, normalization.method = "LogNormalize")
-  
+  vars_to_regress <- NULL
   if(regress)
   {
-    object1 <- find_cell_cycle_genes(object)
-    
+    vars_to_regress <- c(vars_to_regress, "nUMI")
+  }
+  
+  if(!is.null(regress_cc))
+  {
+    object1 <- try_assign_cell_cycle(object)
     if(!is.null(object1))
     {
       object<-object1
-      if(regress_cc_diff)
+      if(regress_cc=="cc_diff")
       {
         object@meta.data$CC.Difference <- object@meta.data$S.Score - object@meta.data$G2M.Score
-        object <- ScaleData(object = object, vars.to.regress = c("nUMI", "CC.Difference"), display.progress = T)
+        vars_to_regress = c(vars_to_regress, "CC.Difference")
       }
       else{
-        object <- ScaleData(object = object, vars.to.regress = c("nUMI", "S.Score", "G2M.Score"), display.progress = T)
+        vars_to_regress = c(vars_to_regress, "S.Score", "G2M.Score")
       }
-    }else{
-      object <- ScaleData(object = object, vars.to.regress = c("nUMI"), display.progress = T)
     }
-  }else{
-    object <- ScaleData(object = object)
   }
+  
+  if(!is.null(vars_to_regress))
+  {
+    object <- ScaleData(object = object, vars.to.regress = vars_to_regress, display.progress = T)
+  }else{
+    object <- ScaleData(object = object, display.progress = T)
+  }
+  
+  
   return(object)
 }
 
@@ -949,13 +954,13 @@ compute_tsne <- function(object)
   return(object)
 }
 
-compute_clustering_min <- function(object, gran_shresh = 2, strict_binary = T)
+compute_clustering_min <- function(object, reduction.type = "pca", gran_shresh = 2, strict_binary = T)
 {
   k.param <- max(round(min(30, ncol(object@raw.data)/3)),3)
   k.scale <- max(round(min(25, ncol(object@raw.data)/4)),2)
   
   print("Building SNN graph...")
-  object <- FindClusters(object = object, algorithm = 3, k.param = k.param, k.scale = k.scale, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
+  object <- FindClusters(object = object, reduction.type = reduction.type, algorithm = 3, k.param = k.param, k.scale = k.scale, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
   
   print("Clustering...")
   test_clustering_rez <- function(object, rez)
@@ -1125,8 +1130,10 @@ compute_clustering_min <- function(object, gran_shresh = 2, strict_binary = T)
 #   return("e")
 # }
 
-seurat_analyse_mtx <- function(mtx, regress = F, regress_cc_diff = F, do.magic = F, do.cluster = T)
+seurat_analyse_mtx <- function(mtx, regress, regress_cc, do.magic, do.cluster = T)
 {
+  
+  
   if(do.magic)
   {
     magic <- tryCatch(magic_impute(as.matrix(mtx)), error = function(e){"e"})
@@ -1139,12 +1146,12 @@ seurat_analyse_mtx <- function(mtx, regress = F, regress_cc_diff = F, do.magic =
  
   object <- CreateSeuratObject(raw.data = as(mtx, "dgCMatrix"))
   
-  return(seurat_analyse(object, regress = regress, regress_cc_diff = regress_cc_diff, do.cluster = do.cluster))
+  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster))
 }
 
-seurat_analyse <- function(object, regress = F, regress_cc_diff = F, do.cluster = T)
+seurat_analyse <- function(object, regress, regress_cc, do.cluster = T)
 {
-  object <- seur_norm_regress(object, regress = regress, regress_cc_diff = regress_cc_diff)
+  object <- seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
   curr_mult <- get_copy_count(object)
   
   object1 <- compute_pca(object)
@@ -1199,7 +1206,7 @@ pick_last_char <- function(x)
   return(substr(x, nchar(x), nchar(x)))
 }
 
-seur_get_raw_and_params <- function(object, ident = NULL, gran_shresh = 2, regress = F, regress_cc_diff = F, do.magic = F)
+seur_get_raw_and_params <- function(object, ident = NULL, gran_shresh = 2, regress, regress_cc, do.magic)
 {
   if(!is.null(ident) && ident =="SeuratProject"){
     ident <- NULL
@@ -1213,18 +1220,17 @@ seur_get_raw_and_params <- function(object, ident = NULL, gran_shresh = 2, regre
   }else{
     raw_data <- object@raw.data[, get_cell_names_by_ident(object, ident)]
   }
-  return(list(object = raw_data, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc_diff = regress_cc_diff, do.magic = do.magic))
+  return(list(object = raw_data, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
 }
 
 seur_find_split <- function(object)
 {
-  ident = object$ident
-  gran_shresh = object$gran_shresh
-  regress = object$regress
-  regress_cc_diff = object$regress_cc_diff
-  do.magic = object$do.magic
-  raw_data = object$object
-    
+  ident <- object$ident
+  gran_shresh <- object$gran_shresh
+  regress <- object$regress
+  regress_cc <- object$regress_cc
+  do.magic <- object$do.magic
+  raw_data <- object$object
   
   curr_mult <- get_copy_count(raw_data)
   if((!is.null(ident) && pick_last_char(toString(ident)) != "f") || is.null(ident) || ncol(raw_data)>=gran_shresh*2)
@@ -1232,7 +1238,8 @@ seur_find_split <- function(object)
     for(mult in seq(curr_mult, 10, 2))
     {
       print(paste0("mult ", mult))
-      object <- tryCatch(seurat_analyse_mtx(dub(raw_data, mult), regress = regress, regress_cc_diff = regress_cc_diff, do.magic = do.magic, do.cluster = T),error = function(e) {"e"})
+      object <- tryCatch(seurat_analyse_mtx(dub(raw_data, mult), regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T),error = function(e) {print(e)
+        return("e")})
       if(typeof(object) != "character")
       {
         if(length(which(table(get_ident(object))>gran_shresh))>1)
@@ -1272,15 +1279,15 @@ seur_stat <- function(object)
   plot_seur(object, method =  "pca")
 }
 
-split_ident <- function(object, ident = NULL, gran_shresh = 2, regress = F, regress_cc_diff = F, do.magic = F)
+split_ident <- function(object, ident = NULL, gran_shresh = 2, regress, regress_cc, do.magic)
 {
-  param_list_for_ident <- seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc_diff = regress_cc_diff, do.magic = do.magic)
+  param_list_for_ident <- seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc = regress_cc, do.magic = do.magic)
   return(seur_find_split(param_list_for_ident))
 }
 
-split_all_ident <- function(object, gran_shresh = 2, regress = F, regress_cc_diff = F, do.magic = F)
+split_all_ident <- function(object, gran_shresh = 2, regress, regress_cc, do.magic)
 {
-  parallel_params_list <- lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc_diff = regress_cc_diff, do.magic = do.magic)})
+  parallel_params_list <- lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc= regress_cc, do.magic = do.magic)})
 
   cl <- makeCluster(min(parallel::detectCores()-1, length(parallel_params_list)))
   doParallel::registerDoParallel(cl)
@@ -1308,7 +1315,7 @@ seur_merge <- function(list_seur)
     temp_object <- MergeSeurat(temp_object, list_seur[[i]])
   }
   temp_object <- SetClusters(temp_object, new_idents)
-  temp_object <- seurat_analyse(temp_object, do.cluster = F)
+  temp_object <- seurat_analyse(temp_object, regress = F, regress_cc = F, do.cluster = F)
   #temp_object <- compute_tsne(temp_object)
   return (temp_object)
 }
@@ -1321,6 +1328,7 @@ plot_seur<- function(object, method = "tsne")
 {
   if(method == "tsne")
   {
+    object <- compute_tsne(object)
     p1 <- TSNEPlot(object = object, group.by = "orig.ident", do.return = TRUE, pt.size = 1.5)
     p2 <- TSNEPlot(object = object, do.return = TRUE, pt.size = 1.5)
     plot_grid(p1, p2)

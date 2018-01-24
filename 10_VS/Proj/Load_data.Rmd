@@ -83,9 +83,9 @@ load_sce <- function(sce)
   {
 
   }else
-    if(!is.null(sce$cell_type2))
+    if(!is.null(sce$Type))
     {
-      colnames(sce) <- types2names(sce$cell_type2)
+      colnames(sce) <- types2names(sce$Type)
     }else
       if(!is.null(sce$cell_type1))
       {
@@ -114,6 +114,17 @@ load_sce <- function(sce)
 # 
 # curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
 
+old <- readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\old.rds")
+new <- readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\new.rds")
+
+
+old <- load_sce(old)
+new <- load_sce(new)
+
+
+
+curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\", counts_mtx = old, markers = markers, clean = T)
+curr_proc1 <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\", counts_mtx = new, markers = markers, clean = T)
 
 curr_assay <- as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.counts.txt"))
 curr_proc <- full_preprocess(working_path = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx = curr_assay, markers = markers, clean = T)
