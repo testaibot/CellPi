@@ -2,160 +2,69 @@
 
 ```{r}
 #load to seurat
-colnames(curr_proc) <- sapply(colnames(curr_proc), function(name) {paste0("old",name)})
-colnames(curr_proc1) <- sapply(colnames(curr_proc1), function(name) {paste0("new",name)})
-
-
-seur_old <- split_ident(CreateSeuratObject(raw.data = curr_proc), regress = T, regress_cc = "cc_diff", do.magic = T)
-
-seur_new <- split_ident(CreateSeuratObject(raw.data = curr_proc1), regress = T, regress_cc = "cc_diff", do.magic = T)
-
-merged_seur <- seur_merge(list(seur_new, seur_old))
-
-merged_seur <- split_ident(merged_seur, regress = T, regress_cc = "cc_diff", do.magic = T)
+seur = split_ident(CreateSeuratObject(raw.data = curr_proc0), regress = F, regress_cc = NULL, do.magic = F)
 
 # library(SC3)
-# sce <- readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
-# sce <- sc3(sce, ks = c(16), biology = F, gene_filter = T)
-
-plot_seur(seur_old)
-plot_seur(seur_new)
-
-#sc3_interactive(sce)
+#  #sce = readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
+#  sce = sce_norm(rel2abs(seur@raw.data)) #sce_norm(ceiling(merged_seur@raw.data))
+#  sce = sc3(sce, ks = c(2,4,8,16,28), biology = F, gene_filter = F)
+# 
+# sc3_interactive(sce)
 ```
 
 ```{r}
+curr = merged_seur0
+plot_seur(curr)
+plot_seur(curr, "pca")
 
-seqwell <- NormalizeData(object = seur_old)
-seqwell <- ScaleData(object = seqwell, vars.to.regress = c("nUMI"), display.progress = T)
-seqwell <- FindVariableGenes(object = seqwell, do.plot = FALSE)
-
-
-tenx <- NormalizeData(object = seur_new)
-tenx <- ScaleData(object = tenx, vars.to.regress = c("nUMI"), display.progress = T)
-tenx <- FindVariableGenes(object = tenx, do.plot = FALSE)
-
-# we will take the union of the top 2k variable genes in each dataset for
-# alignment note that we use 1k genes in the manuscript examples, you can
-# try this here with negligible changes to the overall results
-hvg.seqwell <- rownames(x = head(x = seqwell@hvg.info, n = 2000))
-hvg.tenx <- rownames(x = head(x = tenx@hvg.info, n = 2000))
-hvg.union <- union(x = hvg.seqwell, y = hvg.tenx)
-
-# lastly, we set the 'protocol' in each dataset for easy identification
-# later it will be transferred to the merged object in RunCCA
-tenx@meta.data[, "protocol"] <- "10X"
-seqwell@meta.data[, "protocol"] <- "SeqWell"
-
-pbmc <- RunCCA(object = tenx, object2 = seqwell, genes.use = hvg.union)
-
-
-
-```
-
-
-```{r}
-pbmc <- AlignSubspace(object = pbmc, reduction.type = "cca", grouping.var = "protocol", 
-    dims.align = 1:20, num.genes = 100)
-```
-
-
-```{r}
-pbmc <- RunPCA(pbmc, reduction.use = "cca")
-DimPlot(object = pbmc, reduction.use = "pca", group.by = "orig.ident", pt.size = 5, dim.1 = 1, dim.2 = 2,
-    do.return = TRUE)
-pbmc <- RunTSNE(pbmc, reduction.use = "cca")
-DimPlot(object = pbmc, reduction.use = "tsne", group.by = "orig.ident", pt.size = 5, 
-    do.return = TRUE)
-DimPlot(object = pbmc, reduction.use = "cca", group.by = "orig.ident", pt.size = 5, 
-    do.return = TRUE)
-
-pbmc <- RunPCA(pbmc, reduction.use = "cca.aligned")
-DimPlot(object = pbmc, reduction.use = "pca", group.by = "orig.ident", pt.size = 5, dim.1 = 1, dim.2 = 2,
-    do.return = TRUE)
-pbmc <- RunTSNE(pbmc, reduction.use = "cca.aligned")
-DimPlot(object = pbmc, reduction.use = "tsne", group.by = "orig.ident", pt.size = 5, 
-    do.return = TRUE)
-DimPlot(object = pbmc, reduction.use = "cca.aligned", group.by = "orig.ident", pt.size = 5, 
-    do.return = TRUE)
+sort_diag(table(get_ident(curr), get_orig_ident(curr)))
 ```
 
 
 
 ```{r}
+object_list = split_all_ident(seur, do.magic = F)
+merged_seur0 = seur_merge(object_list)
+object_list1 = split_all_ident(merged_seur0, do.magic = F)
+merged_seur1 = seur_merge(object_list1)
+
+object_list2 = split_all_ident(merged_seur1, do.magic = T)
+merged_seur2 = seur_merge(object_list2)
+
+object_list3 = split_all_ident(merged_seur2, do.magic = T)
+merged_seur3 = seur_merge(object_list3)
+object_list4 = split_all_ident(merged_seur3, do.magic = T)
+merged_seur4 = seur_merge(object_list4)
+
+# object_list10 = split_all_ident(merged_seur3, regress = T, regress_cc = "cc_diff", do.magic = T)
+# merged_seur10 = seur_merge(object_list10)
 
 
-pbmc <- RunTSNE(object = pbmc, reduction.use = "cca.aligned", dims.use = 1:20, 
-    do.fast = TRUE)
-
-pbmc <- FindClusters(object = pbmc, reduction.type = "cca.aligned", dims.use = 1:20, 
-    save.SNN = TRUE)
-p1 <- TSNEPlot(object = pbmc, group.by = "protocol", do.return = TRUE, pt.size = 0.5)
-p2 <- TSNEPlot(object = pbmc, do.return = TRUE, pt.size = 0.5)
-plot_grid(p1, p2)
+  # temp = FindClusters(object  =  seur, resolution = 1.7, algorithm  =  3, k.param  =  max(round(min(30, ncol(seur@raw.data)/3)),3), k.scale  =  max(round(min(25, ncol(seur@raw.data)/4)),2), modularity.fxn  =  1, print.output  =  F, save.SNN  =  T, force.recalc  =  T)
 
 
-seur_new <- split_ident(pbmc)
-plot_seur(pbmc, "pca")
+(table(sapply(get_ident(temp),toString)))
+sort_diag(table(get_orig_ident(seur), get_ident(seur)))
 ```
 
 
 ```{r}
-table(get_types(colnames(old)))
-table(get_types(colnames(new)))
-
-table(get_orig_ident(seur_old))
-table(get_orig_ident(seur_new))
-```
-
-
-```{r}
-object_list <- split_all_ident(seur_new, do.magic = F)
-merged_seur <- seur_merge(object_list)
-object_list1 <- split_all_ident(merged_seur, do.magic = F)
-merged_seur1 <- seur_merge(object_list1)
-
-object_list2 <- split_all_ident(merged_seur1, do.magic = F)
-merged_seur2 <- seur_merge(object_list2)
-
-object_list3 <- split_all_ident(merged_seur2, do.magic = F)
-merged_seur3 <- seur_merge(object_list3)
-object_list4 <- split_all_ident(merged_seur3, do.magic = F)
-merged_seur4 <- seur_merge(object_list4)
-
-
-table(sapply(get_ident(merged_seur3),toString))
-
-object_list3
-```
-
-
-```{r}
-
-sort_diag(table(get_orig_ident(merged_seur2), get_ident(merged_seur2)))
-
-#go to prev chunk
-#curr <- seur_1
+curr = merged_seur0
 
 ```
 
 ```{r}
+temp = sce$sc3_28_clusters
 
-temp1 <- get_orig_ident(curr)
-names(temp1) <- sapply(names(get_ident(curr)), function(item){return(paste(unlist(strsplit(item, ".", fixed = TRUE))[c(1,1)], collapse ="."))})
 
-```
-
-```{r}
-temp <- sce$sc3_16_clusters
-names(temp) <- types2names(sce@colData$cell_type1)
-tab <- table(sce@colData$cell_type1, temp)
+names(temp) = types2names(sce@colData$cell_type1)
+tab = table(sce@colData$X, temp)
 sort_diag(tab)
 plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)
 
-curr <- merged_seur
-tab <- table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 3))
+curr = merged_seur1
+tab = table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 3))
 sort_diag(tab)
 plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)
@@ -166,37 +75,41 @@ sum(tab)
 
 
 ```{r}
-curr <- merged_seur_sub
 
+cl_markers1 = FindAllMarkers(curr, test.use = "MAST", logfc.threshold = 0.05, return.thresh = 0.05, only.pos = F, min.pct = 0.7)
 
-  
-#cl_markers <- find_markers(curr, test.use = "MAST", logfc.threshold = 0.2, only.pos = F, min.pct = 0.7)
+cl_markers1 = cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasing = T),]
 
-cl_markers1 <- FindAllMarkers(curr, test.use = "MAST", logfc.threshold = 0.2, only.pos = F, min.pct = 0.7)
-
-cl_markers1 <- cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasing = T),]
-cl_markers1_p <- cl_markers1[,]
-tab <- cl_markers1[!grepl("^ERCC-", rownames(cl_markers1))&(cl_markers1$avg_logFC<(-0.5))&(cl_markers1$cluster=="2111"),]
+tab = cl_markers1[!grepl("^ERCC-", rownames(cl_markers1))&(cl_markers1$avg_logFC<(-0.5))&(cl_markers1$cluster=="2111"),]
 table(tab$cluster)
 rownames(tab)
 
-unique(cl_markers1$cluster)
+sort(rownames(cl_markers1))
 
 #test GO, default params
 #GO_enr(cl_markers)
 
+for(i in unique(cl_markers1$cluster))
+{
+  shreh = 0
+  mark_p = intersect(sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC > (shreh)) & (cl_markers1$cluster==i))]),markers)
+  mark_n = intersect(sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC < (-shreh)) & (cl_markers1$cluster==i))]),markers)
+  if(length(mark_p)>0 && length(mark_n)>0)
+    {
+      print(list(i = i,
+             mark_p = mark_p,
+        mark_n = mark_n))
+    }
+}
 
 
-sort(rownames(cl_markers$cluster.markers[4]$ident)[which(cl_markers$cluster.markers[4]$ident$avg_logFC < (0))])
-
-
-
+cl_markers1[c("Esrrb", "Jarid2", "Klf4",  "Nanog", "Pou5f1", "Sall4", "Sox2",  "Tbx3", "Tet1",  "Utf1" ,  "Wdr5" ,  "Zfp281"),]
 
 ```
 
 
 ```{r}
-curr <- merged_seur1
+curr = merged_seur1
 
 table(get_ident(curr), get_orig_ident(curr))
 plot_seur(curr)
@@ -219,9 +132,9 @@ for(gene in intersect(rownames(cl_markers$cluster.markers[1]$ident),  markers))
 ```
 
 ```{r}
-
+curr<-RunTSNE(curr)
 par( mfrow = c(1,1))
-for(gene in "POS_B")
+for(gene in "Klf4")
 {
   FeaturePlot(object = curr, reduction.use = "tsne", features.plot = gene, cols.use = c("red", "green"))
 }

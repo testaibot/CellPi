@@ -27,7 +27,12 @@ ipak(biocpackages, repository = "Bioconductor")
 # GITHUB packages
 githubpackages <- c("mohuangx/SAVER", "satijalab/seurat")
 ipak(githubpackages, repository = "github")
- 
+
+for(lib in c(cranpackages, biocpackages, c("SAVER", "Seurat")))
+{
+  tools:::makeLazyLoading(lib)
+}
+
 ```
 
 
