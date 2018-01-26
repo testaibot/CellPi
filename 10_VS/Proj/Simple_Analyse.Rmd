@@ -2,7 +2,9 @@
 
 ```{r}
 #load to seurat
-seur = split_ident(CreateSeuratObject(raw.data = curr_proc0), regress = F, regress_cc = NULL, do.magic = F)
+
+rec_final = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL)
+
 
 # library(SC3)
 #  #sce = readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
@@ -13,19 +15,25 @@ seur = split_ident(CreateSeuratObject(raw.data = curr_proc0), regress = F, regre
 ```
 
 ```{r}
-curr = merged_seur0
+curr = seur
 plot_seur(curr)
 plot_seur(curr, "pca")
 
-sort_diag(table(get_ident(curr), get_orig_ident(curr)))
+sort_diag(table(get_orig_ident(curr), get_ident(curr)))
+
+curr = seur1
+plot_seur(curr)
+plot_seur(curr, "pca")
+
+sort_diag(table(get_orig_ident(curr), get_ident(curr)))
 ```
 
 
 
 ```{r}
-object_list = split_all_ident(seur, do.magic = F)
+object_list = split_all_ident(seur, do.magic = T)
 merged_seur0 = seur_merge(object_list)
-object_list1 = split_all_ident(merged_seur0, do.magic = F)
+object_list1 = split_all_ident(merged_seur0, do.magic = T)
 merged_seur1 = seur_merge(object_list1)
 
 object_list2 = split_all_ident(merged_seur1, do.magic = T)
@@ -63,8 +71,8 @@ sort_diag(tab)
 plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)
 
-curr = merged_seur1
-tab = table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 3))
+curr = merged_seur4
+tab = table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 5))
 sort_diag(tab)
 plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)

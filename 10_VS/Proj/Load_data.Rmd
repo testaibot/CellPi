@@ -133,6 +133,9 @@ curr_proc0 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/out
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\deng-reads.rds"))
 curr_proc1 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/deng-reads/", counts_mtx  =  curr_assay, markers  =  markers, clean  =  T)
 
+
+simple_preprocessing(sce_norm(curr_assay))
+
 table(get_types(colnames(curr_assay)))
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\fan.rds"))

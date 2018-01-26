@@ -356,23 +356,20 @@ magic_impute = function (mtx, components = 100)
     storage.mode(B) = "numeric"
     return (B)
   }
-  mtx = rel2abs(mtx)
   
   file_in = paste0(digest::digest(mtx), "_for_magic_exprs.csv")
   file_out = paste0(digest::digest(mtx), "_magic_out.csv")
   
   write.csv(mtx, file = file_in)
   
-  system(paste0('bash -c "MAGIC.py -d ', file_in, ' -o ', file_out, '  --cell-axis \'columns\' -p ', min(components, nrow(mtx)),' csv"'))
+  tryCatch(system(paste0('bash -c "MAGIC.py -d ', file_in, ' -o ', file_out, '  --cell-axis \'columns\' -p ', min(components, nrow(mtx)),' csv"')))
   
-  magic_imputed = read.csv(file = file_out)
-  
-  magic_imputed = magicimpute2matrix(magic_imputed)
+  magic_imputed = tryCatch(na.omit(magicimpute2matrix(read.csv(file = file_out))), error = function(e){NULL})
   
   unlink(file_in)
   unlink(file_out)
   
-  return (na.omit(magic_imputed))
+  return (magic_imputed)
 }
 
 
@@ -596,7 +593,7 @@ get_sum_factors = function(sce)
   return (sce)
 }
 
-sce_norm = function(mtx, inside_recursion = F)
+sce_norm = function(mtx)
 {
   filter_simple = function(sce, numgenes_sh = 2, numcells_sh = 2, lowerDetectionLimit_gene = 1, lowerDetectionLimit_cell = 1)
   {
@@ -615,7 +612,7 @@ sce_norm = function(mtx, inside_recursion = F)
     return(sce)
   }
   
-  if(any(mtx%%1!=0)&&(!inside_recursion))
+  if(any(mtx%%1!=0))
   {
     mtx = rel2abs(log2(mtx+1))
   }
@@ -678,7 +675,7 @@ full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = 
         sce_saver = lapply(sce_cycled, saver_two_path_impute)
       }else{
         print("S")
-        sce_saver = lapply(sce_cycled, function(sce_set){return(exprs(simple_preprocessing(sce_set)))})
+        sce_saver = lapply(sce_cycled, function(sce_set){return(exprs(simple_preprocessing(sce_norm(sce_set))))})
       }
     }
     else
@@ -929,7 +926,7 @@ compute_pca = function(object)
   for(pc_use in unique(round(seq(init_pc, end_pc, -step))))
   {
     print(pc_use)
-    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
+    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = T, weight.by.var = T),
                        error = function(e) {"e"}, 
                        warning = function(w) {"w"}
     )
@@ -996,9 +993,9 @@ compute_clustering_min = function(object, reduction.type = "pca", gran_shresh = 
   direction = 1
   max_num = 3
   from = 0
-  to = 10
+  to = 30
   
-  for(depth in 1:max_num)
+  for(depth in 0:max_num)
   {
     
     if(from==to)
@@ -1150,7 +1147,7 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster 
   
   if(do.magic)
   {
-    magic = tryCatch(magic_impute(as.matrix(object)), error = function(e){NULL})
+    magic = magic_impute(as.matrix(object))
     if(!is.null(magic))
     {
       print("magic")
@@ -1260,10 +1257,10 @@ seur_find_split = function(object)
     (is.null(ident) || ncol(raw_data)>= gran_shresh*2)
   )
   {
-    for(mult in seq(curr_mult, 10, 2))
+    #for(mult in seq(curr_mult, 10, 1))
     {
-      print(paste0("mult ", mult))
-      object = tryCatch(seurat_analyse_mtx(dub(raw_data, mult), regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T),error = function(e) {print(e)
+      #print(paste0("mult ", mult))
+      object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T),error = function(e) {print(e)
         return("e")})
       if(typeof(object) !=  "character")
       {
@@ -1310,7 +1307,7 @@ split_ident = function(object, ident = NULL, gran_shresh = 2, regress = F, regre
   return(seur_find_split(param_list_for_ident))
 }
 
-split_all_ident = function(object, gran_shresh= 2, regress = F, regress_cc = NULL, do.magic = F)
+split_all_ident = function(object, gran_shresh = 2, regress = F, regress_cc = NULL, do.magic = F)
 {
   parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc =  regress_cc, do.magic = do.magic)})
   
@@ -1465,6 +1462,17 @@ sort_diag = function(object)
   return(object[, order(sapply(1:ncol(object), function (x) {return(which.max(object[,x]))}))])
 }
 
+
+cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = F)
+{
+  object = split_ident(CreateSeuratObject(raw.data = object, regress = regress, regress_cc = regress, do.magic = regress))
+  
+  while(any(sapply(sapply(get_ident(merged_seur1), toString), pick_last_char)!="f"))
+  {
+    object = seur_merge(split_all_ident(object, regress = regress, regress_cc = regress, do.magic = regress))
+  }
+  return(cluster_recursive)
+}
 
 
 
