@@ -1471,7 +1471,7 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
   {
     object = seur_merge(split_all_ident(object, regress = regress, regress_cc = regress, do.magic = regress))
   }
-  return(cluster_recursive)
+  return(object)
 }
 
 ```
