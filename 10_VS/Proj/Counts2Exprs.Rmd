@@ -1467,7 +1467,7 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
 {
   object = split_ident(CreateSeuratObject(raw.data = object, regress = regress, regress_cc = regress, do.magic = regress))
   
-  while(any(sapply(sapply(get_ident(merged_seur1), toString), pick_last_char)!="f"))
+  while(any(sapply(sapply(get_ident(object), toString), pick_last_char)!="f"))
   {
     object = seur_merge(split_all_ident(object, regress = regress, regress_cc = regress, do.magic = regress))
   }
