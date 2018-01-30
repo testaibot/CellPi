@@ -913,8 +913,6 @@ seur_norm_regress = function(object, regress, regress_cc)
     object = ScaleData(object = object, display.progress = T, check.for.norm = F)
   }
   
-  object = FindVariableGenes(object, do.plot = F, display.progress = F)
-  
   return(object)
 }
 
@@ -1126,7 +1124,6 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster 
 seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL, k.param_factor = 10)
 {
   object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
-  #curr_mult = get_copy_count(object)
   
   object1 = compute_pca(object)
   if(typeof(object1) !=  "character")

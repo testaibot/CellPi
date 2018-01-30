@@ -14,20 +14,20 @@ rec_final4 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 
 
 
-# temp = seurat_analyse_mtx(curr_proc1, regress = F, regress_cc = NULL, do.magic = F)
-# table(get_orig_ident(temp), get_ident(temp))
-# 
-# temp1 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp, "1")], regress = F, regress_cc = NULL, do.magic = F)
-# table(get_orig_ident(temp1), get_ident(temp1))
-# 
-# temp2 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp1, "0")], regress = F, regress_cc = NULL, do.magic = F)
-# table(get_orig_ident(temp2), get_ident(temp2))
-# 
-# temp3 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp2, "0")], regress = F, regress_cc = NULL, do.magic = F)
-# table(get_orig_ident(temp3), get_ident(temp3))
-# 
-# temp4 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp3, "0")], regress = F, regress_cc = NULL, do.magic = F)
-# table(get_orig_ident(temp4), get_ident(temp4))
+temp = seurat_analyse_mtx(curr_proc1, regress = F, regress_cc = NULL, do.magic = F)
+table(get_orig_ident(temp), get_ident(temp))
+
+temp1 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp, "0")], regress = F, regress_cc = NULL, do.magic = F)
+table(get_orig_ident(temp1), get_ident(temp1))
+
+temp2 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp1, "0")], regress = F, regress_cc = NULL, do.magic = F)
+table(get_orig_ident(temp2), get_ident(temp2))
+
+temp3 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp2, "0")], regress = F, regress_cc = NULL, do.magic = F)
+table(get_orig_ident(temp3), get_ident(temp3))
+
+temp4 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp3, "0")], regress = F, regress_cc = NULL, do.magic = F)
+table(get_orig_ident(temp4), get_ident(temp4))
 
 # temp5 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp4, "1")], regress = F, regress_cc = NULL, do.magic = F)
 # table(get_orig_ident(temp5), get_ident(temp5))
@@ -78,7 +78,7 @@ rec_final4 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 ```
 
 ```{r}
-curr = temp4
+curr = temp1
 plot_seur(curr)
 
 plot_seur(curr, "pca")
