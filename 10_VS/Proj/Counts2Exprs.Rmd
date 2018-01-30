@@ -391,7 +391,7 @@ types2names = function(types)
     DE_genes = unique(DE_genes, c(M3Drop_genes$left, M3Drop_genes$right))
   
     object = CreateSeuratObject(raw.data = mtx, min.cells = 3, min.genes = 200)
-    object = NormalizeData(object = object, normalization.method = "LogNormalize")
+    object = NormalizeData(object = object, normalization.method = "LogNormalize", display.progress = F)
     object = FindVariableGenes(object = object, mean.function = ExpMean, dispersion.function = LogVMR)
     
     DE_genes = unique(c(object@var.genes, DE_genes))
@@ -612,10 +612,10 @@ sce_norm = function(mtx)
     return(sce)
   }
   
-  if(any(mtx%%1!=0))
-  {
-    mtx = rel2abs(log2(mtx+1))
-  }
+  # if(any(mtx%%1!=0))
+  # {
+  #   mtx = rel2abs(mtx)
+  # }
 
   sce_temp = SingleCellExperiment(assays = list(counts = mtx), colData = get_types(colnames(mtx)))
   rowData(sce_temp)$feature_symbol = rownames(sce_temp)
@@ -630,7 +630,7 @@ sce_norm = function(mtx)
   return (sce_temp)
 }
   
-full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = T, impute = F, markers = NULL, clean = FALSE)
+full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = F, impute = F, markers = NULL, clean = T)
 {
   print("Loading data...")
   dir.create(working_path, showWarnings = FALSE)
@@ -882,7 +882,7 @@ try_assign_cell_cycle = function(object)
 seur_norm_regress = function(object, regress, regress_cc)
 {
   object@meta.data[, "orig.ident"] = get_types(colnames(object@raw.data))
-  object = NormalizeData(object = object, normalization.method = "LogNormalize")
+  object = NormalizeData(object = object, normalization.method = NULL, display.progress = F)
   vars_to_regress = NULL
   if(regress)
   {
@@ -908,25 +908,26 @@ seur_norm_regress = function(object, regress, regress_cc)
   
   if(!is.null(vars_to_regress))
   {
-    object = ScaleData(object = object, vars.to.regress = vars_to_regress, display.progress = T)
+    object = ScaleData(object = object, vars.to.regress = vars_to_regress, display.progress = T, check.for.norm = F)
   }else{
-    object = ScaleData(object = object, display.progress = T)
+    object = ScaleData(object = object, display.progress = T, check.for.norm = F)
   }
   
+  object = FindVariableGenes(object, do.plot = F, display.progress = F)
   
   return(object)
 }
 
 compute_pca = function(object)
 {
+  pc_seq = c(100,90,80,70,60,50,40,30,20,15,10,8,6,5,4,3,2)
   init_pc = min(max(nrow(object@raw.data)/120, 30), 100)
-  end_pc = 2
-  step = (init_pc-end_pc)/10
   
-  for(pc_use in unique(round(seq(init_pc, end_pc, -step))))
+  for(pc_use in pc_seq[pc_seq<=init_pc])
   {
-    print(pc_use)
-    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = T, weight.by.var = T),
+    #print(pc_use)
+    
+    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@raw.data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
                       error = function(e) {"e"}, 
                       warning = function(w) {"w"}
                       )
@@ -941,15 +942,22 @@ compute_pca = function(object)
   return ("e")
 }
 
-compute_tsne = function(object)
+compute_tsne = function(object, dim.embed = 2)
 {
   init_plex = max(ncol(object@raw.data)/20, 30)
   end_plex = 2
   step = (init_plex-end_plex)/10
   
+  
+  print(length(object@var.genes))
   for(perplex in unique(round(seq(init_plex, end_plex, -step))))
   {
-    object1 = tryCatch(RunTSNE(object = object, dims.use = 1:ncol(object@dr$pca@cell.embeddings), dim.embed = 2, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
+    object1 = tryCatch(RunTSNE(object = object,
+                               dims.use = 1:10,#ncol(object@dr$pca@cell.embeddings), 
+                                                dim.embed = dim.embed, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
+    
+    
+    
     if(typeof(object1) !=  "character")
     {
       print(paste0("perplex ", perplex))
@@ -960,29 +968,43 @@ compute_tsne = function(object)
   return(object)
 }
 
-compute_clustering_min = function(object, reduction.type = "pca", gran_shresh = 2, strict_binary = T)
+compute_clustering_min = function(object, strict_binary = T, k.param_factor = 10)
 {
-  k.param = max(round(ncol(object@raw.data)/10),3)
-  k.scale = max(round(ncol(object@raw.data)/15),2)
+  k.param = max(ceiling(ncol(object@raw.data)/k.param_factor),3)
+  k.scale = 2#max(ceiling(ncol(object@raw.data)/k.param_factor+1),2)
+  gran_shresh = k.scale
+  
+  print("Building SNN...")
+  object = compute_tsne(object, dim.embed = 5)
+  object = FindClusters(object = object,
+                        dims.use = 1:5
+                        , reduction.type = "tsne", 
+                        resolution = 0, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T, prune.SNN = 0, n.start = 10)
   
   print("Clustering...")
-  test_clustering_rez = function(rez)
+  test_clustering = function(clusters)
   {
-    object = FindClusters(object = object, resolution = rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = F)
-    if(length(table(get_ident(object)))<2)
+    if(length(clusters)<2)
     {
       return(2)
-    }
-    if(length(table(get_ident(object)))>= 2)
+    }else if(length(clusters)>= 2)
     {
-      if(min(table(get_ident(object)))<gran_shresh){
-        return(NULL)
-      }else if(length(table(get_ident(object))) == 2)
+      if(length(clusters) == 2)
       {
-        return(0)
-      }else 
+        if(min(clusters)>gran_shresh)
+        {
+          return(0)
+        }else{
+          return(2)
+        }
+      }else if(length(clusters) > 2)
       {
-        return(1)
+        if(length(which(clusters>gran_shresh)>1))
+        {
+          return(1)
+        }else{
+          return(NULL) 
+        }
       }
     }else{
       return(-1)
@@ -994,10 +1016,14 @@ compute_clustering_min = function(object, reduction.type = "pca", gran_shresh = 
   max_num = 3
   from = 0
   to = 30
+  test_rez = NULL
+  
+  last_clusters = NULL
+  clusters = NULL
+  last_count = 1
   
   for(depth in 0:max_num)
   {
-    
     if(from==to)
     {
       break
@@ -1005,9 +1031,24 @@ compute_clustering_min = function(object, reduction.type = "pca", gran_shresh = 
     
     for(rez in seq(from, to, direction*(10^-depth)))
     {
+      if(!strict_binary)
+      {
+        if(!is.null(clusters) && !is.null(last_clusters) && all(as.vector(last_clusters)==as.vector(clusters)))
+        {
+          last_count = last_count+1
+        }else{
+          last_count = 1
+          last_clusters = clusters
+        }
+      }
       
-      test_rez = test_clustering_rez(rez)
-      print(test_rez)
+      print(rez)
+      object = FindClusters(object = object, resolution = rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10)
+      
+      clusters = as.vector(table(get_ident(object)))
+      test_rez = test_clustering(clusters)
+      
+      #print(test_rez)
       if(direction > 0)
       {
         if(is.null(test_rez)){
@@ -1044,6 +1085,7 @@ compute_clustering_min = function(object, reduction.type = "pca", gran_shresh = 
           next
         }
       }
+      print(table(get_orig_ident(object), get_ident(object)))
     }
     
     if(test_rez == 0 || (!strict_binary&&test_rez == 1))
@@ -1053,97 +1095,16 @@ compute_clustering_min = function(object, reduction.type = "pca", gran_shresh = 
     direction = -direction
   }
   
-  object = FindClusters(object = object, resolution = good_rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = F)
+  object = FindClusters(object = object, resolution = good_rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10)
+  
   return(object)
 }
 
-# compute_clustering_max = function(object, mult = 1)
-# {
-#   k.param = max(round(min(30, ncol(object@raw.data)/3)),3)
-#   k.scale = max(round(min(25, ncol(object@raw.data)/4)),2)
-#   
-#   object = FindClusters(object = object, algorithm = 3, k.param = k.param, k.scale = k.scale, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
-#   
-#   if(mult<2)
-#   {
-#     test_clustering_rez = function(object, rez)
-#     {
-#         s_out = capture.output(FindClusters(object = object, resolution = rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T))
-#       
-#         s_out = unlist(strsplit(s_out[which(grepl("singletons identified", s_out))], c(" |\""), fixed = F))
-#         s_out = s_out[which(grepl("^\\d+$", s_out))][1]
-#     
-#         if(is.null(s_out))
-#         {
-#           return(0)
-#         }else{
-#           return(as.numeric(s_out))
-#         }
-#     }
-#     
-#     rez_curr = "e"
-#     
-#     for(rez in seq(0.1, 10.1, 1))
-#     {
-#       if(test_clustering_rez(object, rez)>0)
-#       {
-#         rez_curr = rez
-#         break
-#       }
-#     }
-#     
-#     
-#     for(rez in seq(rez_curr, 0.1, -0.1))
-#     {
-#       if(test_clustering_rez(object, rez) == 0)
-#       {
-#         rez_curr = rez
-#         break
-#       }
-#     }
-#     
-#     print(paste0("rez ", rez_curr))
-#     object = FindClusters(object = object, resolution = rez_curr, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
-#     object1 = ValidateClusters(object, pc.use = 1:ncol(object@dr$pca@cell.embeddings))
-#     if(length(table(get_ident(object1))>1)>1)
-#     {
-#       print("Clustered...")
-#       return (object1)
-#     }else{
-#         if(length(table(get_ident(object))>1)>1){
-#           print("Clustered without correction...")
-#           return(object)
-#         }else{
-#           print("singletons-allowed clustering...")
-#           for(rez in seq(rez_curr, 10.1, 0.1))
-#           {
-#             object = FindClusters(object = object, resolution = rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
-#             if(length(table(get_ident(object))>1)>1)
-#             {
-#               return(object)
-#             }
-#           }
-#         }
-#     }
-#     return("e")
-#   }else{
-#     print("Unreliable clustering...")
-#     for(rez in seq(0.1, 1.0, 0.1))
-#     {
-#       object = FindClusters(object = object, resolution = rez, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T)
-#       if(length(which(table(get_ident(object))>1))>1){
-#         print(paste0("rez ", rez))
-#         return(object)
-#       }
-#     }
-#   }
-#   return("e")
-# }
 
-seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T)
+seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T, k.param_factor = 10)
 {
-  object = exprs(simple_preprocessing(sce_norm(object)))
-  raw = NULL
+  raw = object
+  object = exprs(sce_norm(raw))
   
   if(do.magic)
   {
@@ -1151,20 +1112,21 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster 
     if(!is.null(magic))
     {
       print("magic")
-      raw = as(object[,colnames(magic)], "dgCMatrix")
+      raw = as(raw[,colnames(magic)], "dgCMatrix")
       object = magic
     }
   }
   
-  object = CreateSeuratObject(raw.data = as(2^object+1, "dgCMatrix"))
+  object = CreateSeuratObject(raw.data = as(object, "dgCMatrix"))
+
  
-  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw))
+  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw, k.param_factor = k.param_factor))
 }
 
-seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL)
+seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL, k.param_factor = 10)
 {
   object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
-  curr_mult = get_copy_count(object)
+  #curr_mult = get_copy_count(object)
   
   object1 = compute_pca(object)
   if(typeof(object1) !=  "character")
@@ -1177,7 +1139,7 @@ seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_befor
   
   if(do.cluster)
   {
-    object1 = compute_clustering_min(object)
+    object1 = compute_clustering_min(object, k.param_factor = k.param_factor)
     if(!is.null(object1))
     {
       object = object1
@@ -1212,6 +1174,10 @@ get_copy_count = function(object)
 
 rename_clusters = function(object, parent.ident = NULL)
 {
+  if(is.null(parent.ident))
+  {
+    parent.ident = "s"
+  }
   object_cl = GetClusters(object)
   object_cl$cluster = match(object_cl$cluster, unique(object_cl$cluster))
   object_cl$cluster = lapply(object_cl$cluster, function(new_ident){return(paste0(parent.ident, new_ident))})
@@ -1224,7 +1190,7 @@ pick_last_char = function(x)
   return(substr(x, nchar(x), nchar(x)))
 }
 
-seur_get_raw_and_params = function(object, ident = NULL, gran_shresh = 2, regress, regress_cc, do.magic)
+seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do.magic)
 {
   if(!is.null(ident) && ident  == "SeuratProject"){
     ident = NULL
@@ -1238,40 +1204,36 @@ seur_get_raw_and_params = function(object, ident = NULL, gran_shresh = 2, regres
   }else{
     raw_data = object@raw.data[, get_cell_names_by_ident(object, ident)]
   }
-  return(list(object = raw_data, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
+  return(list(object = raw_data, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
 }
 
 seur_find_split = function(object)
 {
   ident = object$ident
-  gran_shresh = object$gran_shresh
   regress = object$regress
   regress_cc = object$regress_cc
   do.magic = object$do.magic
   raw_data = object$object
   
-  curr_mult = get_copy_count(raw_data)
-  if(
-    (!is.null(ident) && (pick_last_char(toString(ident)) !=  "f")) 
-     || 
-    (is.null(ident) || ncol(raw_data)>= gran_shresh*2)
-    )
+  #curr_mult = get_copy_count(raw_data)
+  if(is.null(ident) || pick_last_char(toString(ident)) !=  "f")
   {
-    #for(mult in seq(curr_mult, 10, 1))
+    #for(mult in seq(curr_mult, 10, 2))
     {
       #print(paste0("mult ", mult))
-      object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T),error = function(e) {print(e)
+      object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T), error = function(e) {print(e)
         return("e")})
       if(typeof(object) !=  "character")
       {
-        if(length(which(table(get_ident(object))>gran_shresh))>1)
-        {
-          object = rename_clusters(object, ident)
-          return(object)
-        }
         if(length(table(get_ident(object))) == ncol(raw_data))
         {
           break
+        }
+        
+        if(length(table(get_ident(object)))>1)
+        {
+          object = rename_clusters(object, ident)
+          return(object)
         }
       }
     }
@@ -1301,15 +1263,15 @@ seur_stat = function(object)
   plot_seur(object, method =  "pca")
 }
 
-split_ident = function(object, ident = NULL, gran_shresh = 2, regress = F, regress_cc = NULL, do.magic = F)
+split_ident = function(object, ident = NULL, regress = F, regress_cc = NULL, do.magic = F)
 {
-  param_list_for_ident = seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc = regress_cc, do.magic = do.magic)
+  param_list_for_ident = seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic)
   return(seur_find_split(param_list_for_ident))
 }
 
-split_all_ident = function(object, gran_shresh = 2, regress = F, regress_cc = NULL, do.magic = F)
+split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F)
 {
-  parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, gran_shresh = gran_shresh, regress = regress, regress_cc =  regress_cc, do.magic = do.magic)})
+  parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic)})
 
   #clean opened threads if the last run was terminated incorrectly
   tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
@@ -1465,15 +1427,19 @@ sort_diag = function(object)
 
 cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = F)
 {
-  object = split_ident(CreateSeuratObject(raw.data = object, regress = regress, regress_cc = regress, do.magic = regress))
+  object = split_ident(CreateSeuratObject(raw.data = object), regress = regress, regress_cc = regress_cc, do.magic = do.magic)
+  tab = sort_diag(table(get_orig_ident(object), get_ident(object)))
+  print(tab)
   
   while(any(sapply(sapply(get_ident(object), toString), pick_last_char)!="f"))
   {
-    object = seur_merge(split_all_ident(object, regress = regress, regress_cc = regress, do.magic = regress))
+    object = seur_merge(split_all_ident(object, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
+    tab = sort_diag(table(get_orig_ident(object), get_ident(object)))
+    print(tab)
   }
+  
   return(object)
 }
-
 ```
 
 ```{r}
@@ -1483,7 +1449,7 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, old_ident = NULL)
   library(scatterplot3d)
   library(rgl)
    
-  object = RunTSNE(object = object, check_duplicates = FALSE, dim.embed = 3)
+  object = compute_tsne(object, dim.embed = 3)
     
   if(method  ==  "tsne")
   {
