@@ -913,8 +913,6 @@ seur_norm_regress = function(object, regress, regress_cc)
     object = ScaleData(object = object, display.progress = T, check.for.norm = F)
   }
   
-  object = FindVariableGenes(object, do.plot = F, display.progress = F)
-  
   return(object)
 }
 
@@ -953,7 +951,7 @@ compute_tsne = function(object, dim.embed = 2)
   for(perplex in unique(round(seq(init_plex, end_plex, -step))))
   {
     object1 = tryCatch(RunTSNE(object = object,
-                               dims.use = 1:10,#ncol(object@dr$pca@cell.embeddings), 
+                               dims.use = 1:min(10, ncol(object@dr$pca@cell.embeddings)), 
                                dim.embed = dim.embed, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
     
     
@@ -971,7 +969,7 @@ compute_tsne = function(object, dim.embed = 2)
 compute_clustering_min = function(object, strict_binary = T, k.param_factor = 10)
 {
   k.param = max(ceiling(ncol(object@raw.data)/k.param_factor),3)
-  k.scale = 2#max(ceiling(ncol(object@raw.data)/k.param_factor+1),2)
+  k.scale = max(ceiling(ncol(object@raw.data)/k.param_factor+1),2)
   gran_shresh = k.scale
   
   print("Building SNN...")
@@ -1126,7 +1124,6 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster 
 seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL, k.param_factor = 10)
 {
   object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
-  #curr_mult = get_copy_count(object)
   
   object1 = compute_pca(object)
   if(typeof(object1) !=  "character")
