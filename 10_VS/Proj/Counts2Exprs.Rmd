@@ -1362,7 +1362,7 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
     print(tab)
   }
   
-  return(list(obj = object, mark = final_markers))
+  return(list(obj = object$obj, mark = final_markers))
 }
 ```
 

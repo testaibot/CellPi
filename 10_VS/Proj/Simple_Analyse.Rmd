@@ -81,23 +81,23 @@ rec_final4 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 
 ```{r}
 curr = rec_final0
-plot_seur(curr)
+plot_seur(curr$obj)
 
-plot_seur(curr, "pca")
+plot_seur(curr$obj, "pca")
 
-sort_diag(table(get_orig_ident(curr), get_ident(curr)))
+sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
 
-plot_seur_3d(curr, radius = 0.5)
+plot_seur_3d(curr$obj, radius = 0.3)
+
+
+markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]
+markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
+
+rownames(markers_novo)
+
+table(markers_novo$cluster)
 ```
 
-
-
-
-
-```{r}
-curr = rec_final
-
-```
 
 ```{r}
 temp = sce$sc3_28_clusters
@@ -110,7 +110,7 @@ plot(sort(colMaxs(sort_diag(tab))))
 sum(tab)
 
 
-tab = table(get_orig_ident(curr), substr(sapply(get_ident(curr),toString), start = 1, stop = 7))
+tab = table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 3))
 sort_diag(tab)
 
 #mclust::adjustedRandIndex()
@@ -119,12 +119,9 @@ sort_diag(tab)
 
 
 ```{r}
-
-cl_markers1 = FindAllMarkers(curr, test.use = "MAST", logfc.threshold = 0.05, return.thresh = 0.05, only.pos = F, min.pct = 0.7)
-
+cl_markers1 = markers_novo
 cl_markers1 = cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasing = T),]
 
-tab = cl_markers1[!grepl("^ERCC-", rownames(cl_markers1))&(cl_markers1$avg_logFC<(-0.5))&(cl_markers1$cluster=="2111"),]
 table(cl_markers1$cluster)
 rownames(tab)
 
@@ -133,7 +130,7 @@ rownames(tab)
 
 for(i in unique(cl_markers1$cluster))
 {
-  shreh = 0.5
+  shreh = 0.9
   mark_p = 
     #intersect(
     sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC > (shreh)) & (cl_markers1$cluster==i))])
@@ -145,14 +142,22 @@ for(i in unique(cl_markers1$cluster))
   if(length(mark_p)>0 && length(mark_n)>0)
     {
       print(list(i = i,
-             mark_p = array(sapply(mark_p, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])})),
-        mark_n = array(sapply(mark_n, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])}))))
+             mark_p = mark_p,# array(sapply(mark_p, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])})),
+        mark_n = mark_n))# array(sapply(mark_n, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])}))))
     }
 }
 
 
-cl_markers1[c("Esrrb", "Jarid2", "Klf4",  "Nanog", "Pou5f1", "Sall4", "Sox2",  "Tbx3", "Tet1",  "Utf1" ,  "Wdr5" ,  "Zfp281"),]
+cl_markers_our = na.omit(cl_markers1[cl_markers1$gene %in% markers,])
+cl_markers_our = cl_markers_our[order(sapply(cl_markers_our[,"avg_logFC"],abs), decreasing = T),]
+cl_markers_our = cl_markers_our[order(cl_markers_our[,"gene"], decreasing = F),]
 
+cl_markers_our
+
+sort(unique(cl_markers1[cl_markers1$cluster%in%c("s1", "s2") & cl_markers1$pct.1>0.9 & cl_markers1$pct.2>0.9,]$gene))
+
+
+unique(cl_markers1[cl_markers1$cluster%in%c("s1") & cl_markers1$pct.1==1 & cl_markers1$pct.2==1 & cl_markers1$avg_logFC<0,]$gene)
 ```
 
 
