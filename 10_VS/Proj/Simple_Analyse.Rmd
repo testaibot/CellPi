@@ -75,10 +75,12 @@ rec_final4 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 #  sce = sc3(sce, ks = c(2,4,8,16,28), biology = F, gene_filter = F)
 # 
 # sc3_interactive(sce)
+
+
 ```
 
 ```{r}
-curr = temp3
+curr = rec_final0
 plot_seur(curr)
 
 plot_seur(curr, "pca")

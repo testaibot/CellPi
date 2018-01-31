@@ -918,13 +918,10 @@ seur_norm_regress = function(object, regress, regress_cc)
 
 compute_pca = function(object)
 {
-  pc_seq = c(100,90,80,70,60,50,40,30,20,15,10,8,6,5,4,3,2)
-  init_pc = min(max(nrow(object@raw.data)/120, 30), 100)
+  pc_seq = c(10,8,6,5,4,3,2)
   
-  for(pc_use in pc_seq[pc_seq<=init_pc])
+  for(pc_use in pc_seq)
   {
-    #print(pc_use)
-    
     object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@raw.data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
                       error = function(e) {"e"}, 
                       warning = function(w) {"w"}
@@ -966,10 +963,10 @@ compute_tsne = function(object, dim.embed = 2)
   return(object)
 }
 
-compute_clustering_min = function(object, strict_binary = T, k.param_factor = 10)
+compute_clustering_min = function(object, strict_binary = T, k.param_factor = 2)
 {
   k.param = max(ceiling(ncol(object@raw.data)/k.param_factor),3)
-  k.scale = max(ceiling(ncol(object@raw.data)/k.param_factor+1),2)
+  k.scale = 2#max(ceiling(ncol(object@raw.data)/k.param_factor+1),2)
   gran_shresh = k.scale
   
   print("Building SNN...")
@@ -1099,7 +1096,7 @@ compute_clustering_min = function(object, strict_binary = T, k.param_factor = 10
 }
 
 
-seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T, k.param_factor = 10)
+seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T, k.param_factor = 2)
 {
   raw = object
   object = exprs(sce_norm(raw))
@@ -1121,7 +1118,7 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster 
   return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw, k.param_factor = k.param_factor))
 }
 
-seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL, k.param_factor = 10)
+seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL, k.param_factor = 2)
 {
   object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
   
@@ -1204,6 +1201,22 @@ seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do
   return(list(object = raw_data, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
 }
 
+finalize_no_split = function(object, ident)
+{
+  object = CreateSeuratObject(raw.data = as(object, "dgCMatrix"))
+  
+  cl_labels = GetClusters(object)
+  if(pick_last_char(toString(ident)) !=  "f")
+  {
+    cl_labels$cluster = rep(paste0(ident, "f"), length(cl_labels$cluster))
+  }else{
+    cl_labels$cluster = rep(ident, length(cl_labels$cluster))
+  }
+  object = SetClusters(object, cl_labels)
+  
+  return(object)
+}
+
 seur_find_split = function(object)
 {
   ident = object$ident
@@ -1230,24 +1243,21 @@ seur_find_split = function(object)
         if(length(table(get_ident(object)))>1)
         {
           object = rename_clusters(object, ident)
-          return(object)
+          cl_markers = tryCatch(FindAllMarkers(object, test.use = "MAST", logfc.threshold = 0.05, return.thresh = 0.01, only.pos = F, min.pct = 0.7), error = function(e){NULL})
+          if(length(cl_markers)==0)
+          {
+            object = finalize_no_split(raw_data, ident)
+          }
+          
+          return(list(obj = object, mark = cl_markers))
         }
       }
     }
   }
   
-  object = CreateSeuratObject(raw.data = as(raw_data, "dgCMatrix"))
+  object = finalize_no_split(raw_data, ident)
   
-  cl_labels = GetClusters(object)
-  if(pick_last_char(toString(ident)) !=  "f")
-  {
-    cl_labels$cluster = rep(paste0(ident, "f"), length(cl_labels$cluster))
-  }else{
-    cl_labels$cluster = rep(ident, length(cl_labels$cluster))
-  }
-  object = SetClusters(object, cl_labels)
-  
-  return(object)
+  return(list(obj = object, mark = NULL))
 }
 
 
@@ -1270,7 +1280,7 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F)
 {
   parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic)})
 
-  #clean opened threads if the last run was terminated incorrectly
+  #clean threads if the last run was terminated incorrectly
   tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
   
   doParallel::registerDoParallel(cores = min(parallel::detectCores()-1, length(parallel_list)))
@@ -1288,20 +1298,23 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F)
 
 seur_merge = function(list_seur)
 {
-  cl_idents = lapply(1:length(labels(list_seur)), function(i) {return(GetClusters(list_seur[[i]]))})
+  cl_idents = lapply(1:length(list_seur), function(i) {return(GetClusters(list_seur[[i]]$obj))})
   new_idents = cl_idents[[1]]
-  temp_object = list_seur[[1]]
+  merged_object = list_seur[[1]]$obj
+  mark = list_seur[[1]]$mark
   list_seur[[1]] = "NULL"
+  
   for(i in 2:length(cl_idents))
   {
     new_idents = rbind(new_idents, cl_idents[[i]])
-    temp_object = MergeSeurat(temp_object, list_seur[[i]], do.normalize = F)
+    merged_object = MergeSeurat(merged_object, list_seur[[i]]$obj, do.normalize = F)
+    mark = rbind(mark, list_seur[[i]]$mark)
     list_seur[[i]] = "NULL"
   }
-  temp_object = SetClusters(temp_object, new_idents)
-  temp_object = seurat_analyse(temp_object, regress = F, regress_cc = NULL, do.cluster = F)
-  #temp_object = compute_tsne(temp_object)
-  return (temp_object)
+  merged_object = SetClusters(merged_object, new_idents)
+  merged_object = seurat_analyse(merged_object, regress = F, regress_cc = NULL, do.cluster = F)
+
+  return (list(obj = merged_object, mark = mark))
 }
 ```
 
@@ -1325,97 +1338,6 @@ plot_seur<- function(object, method = "tsne")
   }
 }
 
-
-plot_venn = function(cl_markers)
-{
-  VENN.LIST = cl_markers$cluster.markers.list[1:min(5, length(cl_markers$cluster.markers))]
-  VENN.LIST = lapply(VENN.LIST, sort)
-
-  names(VENN.LIST) = (1:min(5, length(cl_markers$cluster.markers)))-1
-  grid.newpage()
-  venn.plot = venn.diagram(VENN.LIST, NULL, fill = rainbow(length(names(VENN.LIST))), 
-                             alpha = rep(0.5,length(names(VENN.LIST))), cex = 2, cat.fontface = 4, 
-                             category.names = names(VENN.LIST), main = "DE Genes Inters")
- 
-  grid.draw(venn.plot)
-}
-
-find_markers = function(object, p_val = 0.05, test.use = "MAST", logfc.threshold = 0.5, only.pos = T, min.pct = 0.8, min.diff.pct = -Inf)
-{
-  cluster.markers = NULL
-  cluster_numbers = NULL
-  
-  for (ident in sort(unique(get_ident(object))))
-  {
-    fm = tryCatch(FindMarkers(object = object, ident.1 = ident,  test.use = test.use, logfc.threshold = logfc.threshold, only.pos = only.pos, min.pct = min.pct, min.diff.pct = min.diff.pct), error = function(e){NULL})
-    if(!is.null(fm))
-    {
-      cluster.markers = c(cluster.markers, list(ident = fm))
-      cluster_numbers = c(cluster_numbers, ident)
-    }
-  }
-  
-  #filter by p_val
-  for (i in 1:length(cluster.markers))
-  {
-    if(length(cluster.markers[i]$ident) == 0){ next }
-    
-    cluster.markers[i]$ident = cluster.markers[i]$ident[which(cluster.markers[i]$ident$p_val_adj<= p_val),]
-  }
-  
-  
-  cluster.markers.list = NULL
-  for (i in 1:length(cluster.markers))
-  {
-    if(length(cluster.markers[i]$ident) == 0){
-      cluster.markers.list = c(cluster.markers.list, list(item = list()))
-      next }
-
-    genome<-detect_genome(rownames(cluster.markers[i]$ident))
-    if(!is.null(genome))
-    {
-      entrez_converted = gene_annot_convert_to(rownames(cluster.markers[i]$ident), org = genome$org, annot = genome$annot)
-      names(entrez_converted$new) = NULL
-  
-      cluster.markers[i]$ident = cluster.markers[i]$ident[match(entrez_converted$old, rownames(cluster.markers[i]$ident)),]
-      cluster.markers.list = c(cluster.markers.list, list(item = entrez_converted$new))
-    
-    }
-    cluster.markers[i]$ident = cluster.markers[i]$ident[order(cluster.markers[i]$ident$avg_logFC, decreasing = T),]
-  }
-  cl_markers = list(cluster.markers = cluster.markers, cluster.markers.list = cluster.markers.list)
-  
-  return(cl_markers)
-}
-
-GO_enr = function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T, org = "m")
-{
-
-  cluster.markers = cl_markers$cluster.markers
-  cluster.markers.list = cl_markers$cluster.markers.list
-
-  names(cluster.markers.list) = rep("item", length(cluster.markers.list))
-  for (i in 1:length(cluster.markers.list))
-  {
-    cl_mark = cluster.markers.list[i]$item
-
-    x = enrichGO(gene = cl_mark, pvalueCutoff = 0.05, qvalueCutoff = 0.05, readable = T, OrgDb = get_annot_db(rownames(cluster.markers$ident), org = org))
-    if(nrow(x@result)>0)
-    {
-      x@result$Description[order(x@result$GeneRatio,decreasing = T)]
-      enrichMap(x, layout = igraph::layout_components, vertex.label.cex = 1, fixed = !new_window)
-      cnetplot(x, categorySize = "GeneRatio", fixed = !new_window)
-    }
-  }
-  names(cluster.markers.list) =  sapply(1:length(cluster.markers.list), function(cl){return(paste0("X",cl-1))})
-
-  res = tryCatch(compareCluster(cluster.markers.list, fun = "enrichGO", OrgDb = get_annot_db(rownames(cluster.markers$ident))), error = function(e){"e"})
-    if(typeof(res) !=  "character")
-    {
-      plot(res, showCategory = 20)
-    }
-}
-
 sort_diag = function(object)
 {
   return(object[, order(sapply(1:ncol(object), function (x) {return(which.max(object[,x]))}))])
@@ -1424,18 +1346,23 @@ sort_diag = function(object)
 
 cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = F)
 {
+  #prevent non-parallel on fist split
   object = split_ident(CreateSeuratObject(raw.data = object), regress = regress, regress_cc = regress_cc, do.magic = do.magic)
-  tab = sort_diag(table(get_orig_ident(object), get_ident(object)))
+  tab = sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj)))
   print(tab)
   
-  while(any(sapply(sapply(get_ident(object), toString), pick_last_char)!="f"))
+  final_markers = rbind(NULL, object$mark)
+  
+  while(any(sapply(sapply(get_ident(object$obj), toString), pick_last_char)!="f"))
   {
-    object = seur_merge(split_all_ident(object, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
-    tab = sort_diag(table(get_orig_ident(object), get_ident(object)))
+    object = seur_merge(split_all_ident(object$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic))
+    final_markers = rbind(final_markers, object$mark)
+    
+    tab = sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj)))
     print(tab)
   }
   
-  return(object)
+  return(list(obj = object, mark = final_markers))
 }
 ```
 
@@ -1493,4 +1420,97 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, old_ident = NULL)
 }
 ```
 
+```{r}
+#GO
+# plot_venn = function(cl_markers)
+# {
+#   VENN.LIST = cl_markers$cluster.markers.list[1:min(5, length(cl_markers$cluster.markers))]
+#   VENN.LIST = lapply(VENN.LIST, sort)
+# 
+#   names(VENN.LIST) = (1:min(5, length(cl_markers$cluster.markers)))-1
+#   grid.newpage()
+#   venn.plot = venn.diagram(VENN.LIST, NULL, fill = rainbow(length(names(VENN.LIST))), 
+#                              alpha = rep(0.5,length(names(VENN.LIST))), cex = 2, cat.fontface = 4, 
+#                              category.names = names(VENN.LIST), main = "DE Genes Inters")
+#  
+#   grid.draw(venn.plot)
+# }
+
+# find_markers = function(object, p_val = 0.05, test.use = "MAST", logfc.threshold = 0.5, only.pos = T, min.pct = 0.8, min.diff.pct = -Inf)
+# {
+#   cluster.markers = NULL
+#   cluster_numbers = NULL
+#   
+#   for (ident in sort(unique(get_ident(object))))
+#   {
+#     fm = tryCatch(FindMarkers(object = object, ident.1 = ident,  test.use = test.use, logfc.threshold = logfc.threshold, only.pos = only.pos, min.pct = min.pct, min.diff.pct = min.diff.pct), error = function(e){NULL})
+#     if(!is.null(fm))
+#     {
+#       cluster.markers = c(cluster.markers, list(ident = fm))
+#       cluster_numbers = c(cluster_numbers, ident)
+#     }
+#   }
+#   
+#   #filter by p_val
+#   for (i in 1:length(cluster.markers))
+#   {
+#     if(length(cluster.markers[i]$ident) == 0){ next }
+#     
+#     cluster.markers[i]$ident = cluster.markers[i]$ident[which(cluster.markers[i]$ident$p_val_adj<= p_val),]
+#   }
+#   
+#   
+#   cluster.markers.list = NULL
+#   for (i in 1:length(cluster.markers))
+#   {
+#     if(length(cluster.markers[i]$ident) == 0){
+#       cluster.markers.list = c(cluster.markers.list, list(item = list()))
+#       next }
+# 
+#     genome<-detect_genome(rownames(cluster.markers[i]$ident))
+#     if(!is.null(genome))
+#     {
+#       entrez_converted = gene_annot_convert_to(rownames(cluster.markers[i]$ident), org = genome$org, annot = genome$annot)
+#       names(entrez_converted$new) = NULL
+#   
+#       cluster.markers[i]$ident = cluster.markers[i]$ident[match(entrez_converted$old, rownames(cluster.markers[i]$ident)),]
+#       cluster.markers.list = c(cluster.markers.list, list(item = entrez_converted$new))
+#     
+#     }
+#     cluster.markers[i]$ident = cluster.markers[i]$ident[order(cluster.markers[i]$ident$avg_logFC, decreasing = T),]
+#   }
+#   cl_markers = list(cluster.markers = cluster.markers, cluster.markers.list = cluster.markers.list)
+#   
+#   return(cl_markers)
+# }
+# 
+# GO_enr = function(cl_markers, p_val = 0.05, q_val = 0.05, new_window = T, org = "m")
+# {
+# 
+#   cluster.markers = cl_markers$cluster.markers
+#   cluster.markers.list = cl_markers$cluster.markers.list
+# 
+#   names(cluster.markers.list) = rep("item", length(cluster.markers.list))
+#   for (i in 1:length(cluster.markers.list))
+#   {
+#     cl_mark = cluster.markers.list[i]$item
+# 
+#     x = enrichGO(gene = cl_mark, pvalueCutoff = 0.05, qvalueCutoff = 0.05, readable = T, OrgDb = get_annot_db(rownames(cluster.markers$ident), org = org))
+#     if(nrow(x@result)>0)
+#     {
+#       x@result$Description[order(x@result$GeneRatio,decreasing = T)]
+#       enrichMap(x, layout = igraph::layout_components, vertex.label.cex = 1, fixed = !new_window)
+#       cnetplot(x, categorySize = "GeneRatio", fixed = !new_window)
+#     }
+#   }
+#   names(cluster.markers.list) =  sapply(1:length(cluster.markers.list), function(cl){return(paste0("X",cl-1))})
+# 
+#   res = tryCatch(compareCluster(cluster.markers.list, fun = "enrichGO", OrgDb = get_annot_db(rownames(cluster.markers$ident))), error = function(e){"e"})
+#     if(typeof(res) !=  "character")
+#     {
+#       plot(res, showCategory = 20)
+#     }
+# }
+
+```
 
