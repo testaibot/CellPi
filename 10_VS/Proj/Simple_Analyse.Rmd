@@ -1,71 +1,38 @@
 
 
 ```{r}
+
 #load to seurat
-rec_final = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F)
-rec_final0 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F)
-rec_final1 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F)
-rec_final2 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F)
-rec_final3 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F)
-rec_final4 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F)
+rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+
+
 
 # rec_final = BuildSNN()
 # rec_final_val = ValidateCluste
 
-temp = seurat_analyse_mtx(curr_proc1, regress = F, regress_cc = NULL, do.magic = F)
-table(get_orig_ident(temp), get_ident(temp))
-
-temp1 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp, "1")], regress = F, regress_cc = NULL, do.magic = F)
-table(get_orig_ident(temp1), get_ident(temp1))
-
-temp2 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp1, "0")], regress = F, regress_cc = NULL, do.magic = F)
-table(get_orig_ident(temp2), get_ident(temp2))
-
-temp3 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp2, "1")], regress = F, regress_cc = NULL, do.magic = F)
-table(get_orig_ident(temp3), get_ident(temp3))
-
-temp4 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp3, "0")], regress = F, regress_cc = NULL, do.magic = F)
-table(get_orig_ident(temp4), get_ident(temp4))
-
-# temp5 = seurat_analyse_mtx(curr_proc1[,get_cell_names_by_ident(temp4, "1")], regress = F, regress_cc = NULL, do.magic = F)
-# table(get_orig_ident(temp5), get_ident(temp5))
-# # 
-# for(k in seq(3, 20))
-# {
-#   temp1 = seurat_analyse_mtx(curr_proc0[,get_cell_names_by_ident(temp, "1")], regress = F, regress_cc = NULL, do.magic = F
-#                              ,k.param_factor = k)
-#   print(k)
-#   try(print(table(get_orig_ident(temp1), get_ident(temp1))))
-# }
+# temp = split_ident(CreateSeuratObject(raw.data = curr_proc5), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp$obj), get_ident(temp$obj))
 # 
-# temp3 = compute_tsne(temp3, do.loadings = T)
+# temp1 = split_ident(temp$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
 # 
-# GetGeneLoadings(temp3, reduction.type = "tsne")
+# temp2 = split_ident(temp1$obj, "s11", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
 # 
-# temp3@dr$tsne
-#     temp3_temp = ValidateClusters(temp3, pc.use = 1:min(4, ), top.genes = 5)
-# DimTopGenes(temp3, reduction.type = "tsne")
-#     
-#     for(pc in 2:ncol(temp3@dr$pca@cell.embeddings))
-#     {
-#       for(g_c in seq(2, 500, 2))
-#       {
-#         for(acc in seq(0.99, 0.9, -0.01))
-#         {
-#            s_out <- capture.output(ValidateClusters(temp3, pc.use = 1:pc, top.genes = g_c, acc.cutoff = 0.9, min.connectivity = 0))
-#           s_out <- unlist(strsplit(s_out[which(grepl("clusters remaining", s_out))], c(" |\""), fixed = F))
-#           s_out <- s_out[which(grepl("^\\d+$", s_out))][2]
-#           
-#           if(as.numeric(s_out)<4)
-#           {
-#             print("ch")
-#             cat("s_out: ", s_out, " acc: ", acc, " pc: ", pc, " g_c:", g_c)
-#             #break
-#           }
-#         }
-#       }
-#     }
-
+# temp3 = split_ident(temp2$obj, "s122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
+# 
+# temp4 = split_ident(temp3$obj, "s1212", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
+# 
+# temp5 = split_ident(temp4$obj, "s12121", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 
 # library(SC3)
 #  #sce = readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
@@ -77,14 +44,15 @@ table(get_orig_ident(temp4), get_ident(temp4))
 ```
 
 ```{r}
-curr = temp3
-plot_seur(curr)
 
-plot_seur(curr, "pca")
+curr = temp
+plot_seur(curr$obj)
 
-sort_diag(table(get_orig_ident(curr), get_ident(curr)))
+plot_seur(curr$obj, "pca")
 
-plot_seur_3d(curr, radius = 0.3, lvls = NULL)
+sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
+
+plot_seur_3d(curr$obj, radius = 1, lvls = NULL)
 
 
 # markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]

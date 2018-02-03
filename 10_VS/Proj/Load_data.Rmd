@@ -123,20 +123,9 @@ load_sce = function(sce)
 # 
 # curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\", counts_mtx  =  old, markers  =  markers)
 # curr_proc1 = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\", counts_mtx  =  new, markers  =  markers)
-# 
-# curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.counts.txt"))
-# curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay, markers  =  markers)
-# 
-# paths = c("F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds", 
-#           "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\deng-reads.rds",
-#           "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\fan.rds",
-#           "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\goolam.rds",
-#           "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\klein.rds",
-#           "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
 
-
-
-
+curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.counts.txt"))
+curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay, markers  =  markers)
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds"))
 curr_proc0 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/biase/", counts_mtx  =  curr_assay, markers  =  markers)
