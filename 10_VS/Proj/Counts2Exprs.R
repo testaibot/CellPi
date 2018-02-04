@@ -1420,7 +1420,6 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
 }
 
 
-
 plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_ident = NULL)
 {
   library(plyr)
@@ -1429,11 +1428,11 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
   
   if(method  ==  "tsne")
   {
-    object = compute_tsne(object, dim.embed = 2)
+    object = compute_tsne(object, dim.embed = 3)
     rl = cbind(
       object@dr$tsne@cell.embeddings[,1],
       object@dr$tsne@cell.embeddings[,2],
-      object@dr$tsne@cell.embeddings[,2]
+      object@dr$tsne@cell.embeddings[,3]
     )
   }
   
@@ -1442,7 +1441,7 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
     rl = cbind(
       object@dr$pca@cell.embeddings[,1],
       object@dr$pca@cell.embeddings[,2],
-      object@dr$pca@cell.embeddings[,2]
+      object@dr$pca@cell.embeddings[,3]
     ) 
     
   }
