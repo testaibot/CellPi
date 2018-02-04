@@ -1321,12 +1321,19 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F,
 {
   parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic, search_markers = search_markers)})
   
+  #clean threads if the last run was terminated incorrectly
+  tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
+  
+  doParallel::registerDoParallel(cores = parallel::detectCores()-1)
+  
   parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = F)) %dopar% {
       source('Counts2Exprs.R', local = TRUE)
       object = seur_find_split(object)
       return(object)
     }
 
+  doParallel::stopImplicitCluster()
+  
   return(parallel_list)
 }
 
@@ -1394,13 +1401,6 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
   print(sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj))))
   final_markers = object$mark
   
-  
-    
-  #clean threads if the last run was terminated incorrectly
-  tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
-  
-  doParallel::registerDoParallel(cores = parallel::detectCores()-1)
-  
   while(any(sapply(sapply(get_ident(object$obj), toString), pick_last_char)!="f") || (!is.null(lvls)&&lvls>1))
   {
     if(!is.null(lvls))
@@ -1415,8 +1415,6 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
     
     print(sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj))))
   }
-  
-  doParallel::stopImplicitCluster()
   
   return(list(obj = object$obj, mark = final_markers))
 }

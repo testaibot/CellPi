@@ -1324,7 +1324,7 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F,
   #clean threads if the last run was terminated incorrectly
   tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
   
-  doParallel::registerDoParallel(cores = min(parallel::detectCores()-1, length(parallel_list)))
+  doParallel::registerDoParallel(cores = parallel::detectCores()-1)
   
   parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = F)) %dopar% {
     source('Counts2Exprs.R', local = TRUE)
@@ -1427,14 +1427,13 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
   library(scatterplot3d)
   library(rgl)
   
-  object = compute_tsne(object, dim.embed = 3)
-  
   if(method  ==  "tsne")
   {
+    object = compute_tsne(object, dim.embed = 2)
     rl = cbind(
       object@dr$tsne@cell.embeddings[,1],
       object@dr$tsne@cell.embeddings[,2],
-      object@dr$tsne@cell.embeddings[,3]
+      object@dr$tsne@cell.embeddings[,2]
     )
   }
   
@@ -1443,7 +1442,7 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
     rl = cbind(
       object@dr$pca@cell.embeddings[,1],
       object@dr$pca@cell.embeddings[,2],
-      object@dr$pca@cell.embeddings[,3]
+      object@dr$pca@cell.embeddings[,2]
     ) 
     
   }
