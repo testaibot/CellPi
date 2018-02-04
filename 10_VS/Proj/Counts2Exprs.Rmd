@@ -924,7 +924,7 @@ seur_norm_regress = function(object, regress, regress_cc)
 
 compute_pca = function(object)
 {
-  pc_seq = c(20, 15, 10, 7, 6, 5, 4, 3, 2)
+  pc_seq = c(20, 15, 10, 7, 6, 5, 4, 3)
   
   for(pc_use in pc_seq)
   {
@@ -984,7 +984,7 @@ compute_tsne = function(object, dim.embed = 2)
   for(perplex in unique(round(seq(init_plex, end_plex, -step))))
   {
     object1 = tryCatch(RunTSNE(object = object,
-                               dims.use = 1:min(10, floor(ncol(object@dr$pca@cell.embeddings)*(2/3))), 
+                               dims.use = 1:min(10, floor(ncol(object@dr$pca@cell.embeddings))), 
                                reduction.use = "pca",
                                                 dim.embed = dim.embed, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
     
@@ -1320,19 +1320,12 @@ split_ident = function(object, ident = NULL, regress = F, regress_cc = NULL, do.
 split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
 {
   parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic, search_markers = search_markers)})
-
-  #clean threads if the last run was terminated incorrectly
-  tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
   
-  doParallel::registerDoParallel(cores = min(parallel::detectCores()-1, length(parallel_list)))
-  
-  parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = TRUE)) %dopar% {
+  parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = F)) %dopar% {
       source('Counts2Exprs.R', local = TRUE)
       object = seur_find_split(object)
       return(object)
     }
-  
-  doParallel::stopImplicitCluster()
 
   return(parallel_list)
 }
@@ -1401,6 +1394,13 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
   print(sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj))))
   final_markers = object$mark
   
+  
+    
+  #clean threads if the last run was terminated incorrectly
+  tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
+  
+  doParallel::registerDoParallel(cores = parallel::detectCores()-1)
+  
   while(any(sapply(sapply(get_ident(object$obj), toString), pick_last_char)!="f") || (!is.null(lvls)&&lvls>1))
   {
     if(!is.null(lvls))
@@ -1408,12 +1408,15 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
       lvls = lvls-1
     }
     
-    object = seur_merge(split_all_ident(object$obj, regress = F, regress_cc = NULL, do.magic = F))
+    object = split_all_ident(object$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers)
+    object = seur_merge(object)
 
     final_markers = rbind(final_markers, object$mark)
     
     print(sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj))))
   }
+  
+  doParallel::stopImplicitCluster()
   
   return(list(obj = object$obj, mark = final_markers))
 }
@@ -1425,15 +1428,14 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
   library(plyr)
   library(scatterplot3d)
   library(rgl)
-   
-  object = compute_tsne(object, dim.embed = 3)
     
   if(method  ==  "tsne")
   {
+    object = compute_tsne(object, dim.embed = 2)
     rl = cbind(
       object@dr$tsne@cell.embeddings[,1],
       object@dr$tsne@cell.embeddings[,2],
-      object@dr$tsne@cell.embeddings[,3]
+      object@dr$tsne@cell.embeddings[,2]
     )
   }
      
@@ -1442,7 +1444,7 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
     rl = cbind(
       object@dr$pca@cell.embeddings[,1],
       object@dr$pca@cell.embeddings[,2],
-      object@dr$pca@cell.embeddings[,3]
+      object@dr$pca@cell.embeddings[,2]
     ) 
       
   }

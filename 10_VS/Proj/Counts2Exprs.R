@@ -595,38 +595,44 @@ get_sum_factors = function(sce)
 
 sce_norm = function(mtx)
 {
-  filter_simple = function(sce, numgenes_sh = 2, numcells_sh = 2, lowerDetectionLimit_gene = 1, lowerDetectionLimit_cell = 1)
+  sce_norm_base = function(mtx)
   {
-    #Simple quality control on the cells
-    keep_feature_col = rowSums(counts(sce)>0) > 0
-    keep_feature_row = colSums(counts(sce)>0) > 0
-    sce = sce[keep_feature_col, keep_feature_row]
+    filter_simple = function(sce, numgenes_sh = 2, numcells_sh = 2, lowerDetectionLimit_gene = 1, lowerDetectionLimit_cell = 1)
+    {
+      #Simple quality control on the cells
+      keep_feature_col = rowSums(counts(sce)>0) > 0
+      keep_feature_row = colSums(counts(sce)>0) > 0
+      sce = sce[keep_feature_col, keep_feature_row]
+      
+      numcells = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_cell, byrow = T)
+      keep.gene = numcells >= numcells_sh
+      
+      numgenes = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_gene, byrow = F)
+      keep.cell = numgenes >= numgenes_sh
+      
+      sce = sce[keep.gene, keep.cell]
+      return(sce)
+    }
     
-    numcells = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_cell, byrow = T)
-    keep.gene = numcells >= numcells_sh
+    sce_temp = SingleCellExperiment(assays = list(counts = mtx), colData = get_types(colnames(mtx)))
+    rowData(sce_temp)$feature_symbol = rownames(sce_temp)
+    sce_temp = sce_temp[!duplicated(rowData(sce_temp)$feature_symbol), ]
     
-    numgenes = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_gene, byrow = F)
-    keep.cell = numgenes >= numgenes_sh
+    sce_temp = filter_simple(sce_temp)
     
-    sce = sce[keep.gene, keep.cell]
-    return(sce)
+    sce_temp = tryCatch(get_sum_factors(sce_temp))
+    
+    #print(summary(sizeFactors(sce_temp)))
+    sce_temp<-normalise(sce_temp)
+    return(sce_temp)
   }
   
-  # if(any(mtx%%1!=0))
-  # {
-  #   mtx = rel2abs(mtx)
-  # }
+  sce_temp = tryCatch(sce_norm_base(mtx), error = function(e){NULL})
+  if(is.null(sce_temp))
+  {
+    sce_temp = sce_norm_base(rel2abs(mtx))
+  }
   
-  sce_temp = SingleCellExperiment(assays = list(counts = mtx), colData = get_types(colnames(mtx)))
-  rowData(sce_temp)$feature_symbol = rownames(sce_temp)
-  sce_temp = sce_temp[!duplicated(rowData(sce_temp)$feature_symbol), ]
-  
-  sce_temp = filter_simple(sce_temp)
-  
-  sce_temp = get_sum_factors(sce_temp)
-  
-  #print(summary(sizeFactors(sce_temp)))
-  sce_temp<-normalize(sce_temp)
   return (sce_temp)
 }
 
@@ -918,11 +924,12 @@ seur_norm_regress = function(object, regress, regress_cc)
 
 compute_pca = function(object)
 {
-  pc_seq = c(10, 7, 6, 5, 4, 3, 2)
+  pc_seq = c(20, 15, 10, 7, 6, 5, 4, 3)
   
   for(pc_use in pc_seq)
   {
-    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@raw.data), print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
+    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@raw.data)
+                              , print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
                        error = function(e) {"e"}, 
                        warning = function(w) {"w"}
     )
@@ -939,7 +946,7 @@ compute_pca = function(object)
 
 select_good_PCs = function(object)
 {
-  object <- JackStraw(object, num.pc = ncol(object@dr$pca@cell.embeddings), num.replicate = 10, prop.freq = 0.1)
+  object <- JackStraw(object, num.pc = ncol(object@dr$pca@cell.embeddings), num.replicate = 5, prop.freq = 0.2)
   
   pAll <- object@dr$pca@jackstraw@emperical.p.value
   pAll <- pAll[, 1:ncol(object@dr$pca@cell.embeddings), drop = FALSE]
@@ -960,8 +967,6 @@ select_good_PCs = function(object)
       pc.score <- 1
     }
     
-    #cat(i, pc.score,"\n")
-    
     if(pc.score <= 0.01)
     {
       pcs_good = c(pcs_good, i)
@@ -970,21 +975,16 @@ select_good_PCs = function(object)
   return(pcs_good)
 }
 
-compute_tsne = function(object, dim.embed = 2, pc.use = NULL)
+compute_tsne = function(object, dim.embed = 2)
 {
-  init_plex = ncol(object@raw.data)/2
+  init_plex = max(10, ncol(object@raw.data)/2)
   end_plex = 2
   step = (init_plex-end_plex)/5
-  
-  if(is.null(pc.use))
-  {
-    pc.use = 1:min(10, ncol(object@dr$pca@cell.embeddings))
-  }
   
   for(perplex in unique(round(seq(init_plex, end_plex, -step))))
   {
     object1 = tryCatch(RunTSNE(object = object,
-                               dims.use = pc.use, 
+                               dims.use = 1:min(10, floor(ncol(object@dr$pca@cell.embeddings))), 
                                reduction.use = "pca",
                                dim.embed = dim.embed, check_duplicates = FALSE, perplexity = perplex),error = function(e) {"e"})
     
@@ -1000,24 +1000,24 @@ compute_tsne = function(object, dim.embed = 2, pc.use = NULL)
 
 compute_clustering_min = function(object, strict_binary = T)
 {
-  k.param_factor = 2
-  k.param = max(ceiling(ncol(object@raw.data)/k.param_factor),2)
-  k.scale = 2
-  gran_shresh = k.scale
-  
-  
-  print("Find optimal PCs...")
+  #print("Find optimal PCs...")
   #good_PC = select_good_PCs(object)
   #print(good_PC)
   
   print("Reducing dims...")
-  object = compute_tsne(object, dim.embed = min(5, ncol(object@dr$pca@cell.embeddings)), pc.use = NULL)
+  
+  object = compute_tsne(object, dim.embed = 2)
+  
+  k.param_factor = 2
+  k.param = max(3, ncol(object@raw.data)/k.param_factor)
+  k.scale = 2
+  gran_shresh = k.scale
   
   print("Building SNN...")
   object = FindClusters(object = object,
                         dims.use = 1:ncol(object@dr$tsne@cell.embeddings)
                         , reduction.type = "tsne", 
-                        resolution = 0, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T, prune.SNN = 0.30, n.start = 10)
+                        resolution = 0, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T, prune.SNN = 0, n.start = 3)
   
   print("Clustering...")
   test_clustering = function(clusters)
@@ -1051,7 +1051,7 @@ compute_clustering_min = function(object, strict_binary = T)
   
   good_rez = NULL
   direction = 1
-  max_num = 3
+  max_num = 10
   from = 0
   to = 30
   test_rez = NULL
@@ -1080,7 +1080,7 @@ compute_clustering_min = function(object, strict_binary = T)
         }
       }
       
-      object = FindClusters(object = object, resolution = rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10)
+      object = FindClusters(object = object, resolution = rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 3)
       
       clusters = as.vector(table(get_ident(object)))
       test_rez = test_clustering(clusters)
@@ -1326,7 +1326,7 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F,
   
   doParallel::registerDoParallel(cores = min(parallel::detectCores()-1, length(parallel_list)))
   
-  parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = TRUE)) %dopar% {
+  parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = F)) %dopar% {
     source('Counts2Exprs.R', local = TRUE)
     object = seur_find_split(object)
     return(object)
@@ -1408,7 +1408,8 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
       lvls = lvls-1
     }
     
-    object = seur_merge(split_all_ident(object$obj, regress = F, regress_cc = NULL, do.magic = F))
+    object = split_all_ident(object$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers)
+    object = seur_merge(object)
     
     final_markers = rbind(final_markers, object$mark)
     
@@ -1570,6 +1571,5 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
 #       plot(res, showCategory = 20)
 #     }
 # }
-
 
 

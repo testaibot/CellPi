@@ -1,20 +1,15 @@
 
 
 ```{r}
+#search_markers is SLOW
+rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
 
-#load to seurat
-rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-
-
-
-# rec_final = BuildSNN()
-# rec_final_val = ValidateCluste
 
 # temp = split_ident(CreateSeuratObject(raw.data = curr_proc5), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp$obj), get_ident(temp$obj))
@@ -34,30 +29,47 @@ rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 # temp5 = split_ident(temp4$obj, "s12121", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 
-# library(SC3)
-#  #sce = readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds")
-#  sce = sce_norm(rel2abs(seur@raw.data)) #sce_norm(ceiling(merged_seur@raw.data))
-#  sce = sc3(sce, ks = c(2,4,8,16,28), biology = F, gene_filter = F)
-# 
-# sc3_interactive(sce)
+library(SC3)
+ sce = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds")
+ #sce = sce_norm(curr_proc) #sce_norm(ceiling(merged_seur@raw.data))
+ sce = sc3(sce, ks = c(2,4,8), biology = F, gene_filter = F)
+
+sc3_interactive(sce)
 
 ```
 
 ```{r}
 
-curr = temp
+```
+
+
+```{r}
+
+curr = rec_final1
 plot_seur(curr$obj)
 
 plot_seur(curr$obj, "pca")
 
-sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
+#sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
 
-plot_seur_3d(curr$obj, radius = 1, lvls = NULL)
+sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 1)))
 
+sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 2)))
 
-# markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]
-# markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
+sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 3)))
+
+sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 4)))
+
+# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 5)))
 # 
+# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 6)))
+
+plot_seur_3d(curr$obj, radius = 3, lvls = 4, method = "pca")
+
+
+markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]
+markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
+
 # rownames(markers_novo)
 # 
 # table(markers_novo$cluster)
@@ -65,18 +77,23 @@ plot_seur_3d(curr$obj, radius = 1, lvls = NULL)
 
 
 ```{r}
-temp = sce$sc3_28_clusters
 
 
-names(temp) = types2names(sce@colData$cell_type1)
-tab = table(sce@colData$X, temp)
-sort_diag(tab)
-plot(sort(colMaxs(sort_diag(tab))))
-sum(tab)
+# temp = sce$sc3_2_clusters
+# names(temp) = types2names(sce@colData$cell_type1)
+# tab = table(sce@colData$cell_type1 , temp)
+# sort_diag(tab)
+# 
+# temp = sce$sc3_4_clusters
+# names(temp) = types2names(sce@colData$cell_type1)
+# tab = table(sce@colData$cell_type1, temp)
+# sort_diag(tab)
+# 
+# temp = sce$sc3_8_clusters
+# names(temp) = types2names(sce@colData$cell_type1)
+# tab = table(sce@colData$cell_type1, temp)
+# sort_diag(tab)
 
-
-tab = table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 3))
-sort_diag(tab)
 
 #mclust::adjustedRandIndex()
 
@@ -87,30 +104,30 @@ sort_diag(tab)
 cl_markers1 = markers_novo
 cl_markers1 = cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasing = T),]
 
-table(cl_markers1$cluster)
-rownames(tab)
-
-#test GO, default params
-#GO_enr(cl_markers)
-
-for(i in unique(cl_markers1$cluster))
-{
-  shreh = 0.9
-  mark_p = 
-    #intersect(
-    sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC > (shreh)) & (cl_markers1$cluster==i))])
-    #,markers)
-  mark_n = 
-    #intersect(
-      sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC < (-shreh)) & (cl_markers1$cluster==i))])
-     # ,markers)
-  if(length(mark_p)>0 && length(mark_n)>0)
-    {
-      print(list(i = i,
-             mark_p = mark_p,# array(sapply(mark_p, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])})),
-        mark_n = mark_n))# array(sapply(mark_n, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])}))))
-    }
-}
+# table(cl_markers1$cluster)
+# rownames(tab)
+# 
+# #test GO, default params
+# #GO_enr(cl_markers)
+# 
+# for(i in unique(cl_markers1$cluster))
+# {
+#   shreh = 0.9
+#   mark_p = 
+#     #intersect(
+#     sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC > (shreh)) & (cl_markers1$cluster==i))])
+#     #,markers)
+#   mark_n = 
+#     #intersect(
+#       sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC < (-shreh)) & (cl_markers1$cluster==i))])
+#      # ,markers)
+#   if(length(mark_p)>0 && length(mark_n)>0)
+#     {
+#       print(list(i = i,
+#              mark_p = mark_p,# array(sapply(mark_p, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])})),
+#         mark_n = mark_n))# array(sapply(mark_n, function(item){return(unlist(strsplit(toString(item),".", fixed = T))[1])}))))
+#     }
+# }
 
 
 cl_markers_our = na.omit(cl_markers1[cl_markers1$gene %in% markers,])
