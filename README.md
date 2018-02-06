@@ -1,4 +1,4 @@
-# CellPype
+# CellPi
 
 Rus
 ```
