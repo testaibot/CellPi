@@ -99,7 +99,7 @@ $reads_path/$srr_id/cell.counts.matrices.rds
 2) scran – [нормализация](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-016-0947-7)
 3) SAVER – [коррекция дропаутов](https://www.biorxiv.org/content/biorxiv/early/2017/05/17/138677.full.pdf), подтверждённо [один из лучших методов](https://www.biorxiv.org/content/early/2017/12/31/241190), используется совместно с M3Drop
 4) M3Drop - поиск диффэкспрессирующихся генов для процедуры коррекции дропаутов, для снижения общего времени работы
-5) monocle – [rel2abs ре-нормализация](https://www.ncbi.nlm.nih.gov/pubmed/28114287) пред-нормализованных либо сложно-нормализуемых ридкаунотов 
+5) monocle – [rel2abs ре-нормализация](https://www.ncbi.nlm.nih.gov/pubmed/28114287) пред-нормализованных либо сложно-нормализуемых ридкаунтов 
 6) biomaRt – конвертация аннотаций
 7) cyclone - [классификация по фазам клеточного цикла](https://www.sciencedirect.com/science/article/pii/S1046202315300098)
 
