@@ -4,7 +4,7 @@ __Under development, not ready for a use__
 
 __English description will be uploaded with the first release__
 
-This pipeline main idea is to take best-practice scRNA-seq data preprocessind tools and integrate them in a fully unsupervised pipeline "from GSE id to cluster's markers"
+The main idea of this pipeline is to take best-practice scRNA-seq data preprocessind tools and integrate them in a fully unsupervised pipeline "from GSE id to cluster's markers"
 
 GSE_id->read counts will be based on the mixture of https://github.com/hms-dbmi/dropEst and https://github.com/CGATOxford/UMI-tools
 
