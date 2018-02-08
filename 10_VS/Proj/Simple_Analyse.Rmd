@@ -2,16 +2,17 @@
 
 ```{r}
 #search_markers is SLOW
-rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
-rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
-rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
-rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
-rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
-rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
-rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+#rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 
+#temp = seurat_analyse_mtx(curr_assay, regress = F, regress_cc = NULL, do.magic = F, do.cluster = F)
 
-# temp = split_ident(CreateSeuratObject(raw.data = curr_proc5), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp = split_ident(CreateSeuratObject(raw.data = curr_proc1), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp$obj), get_ident(temp$obj))
 # 
 # temp1 = split_ident(temp$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
@@ -20,59 +21,62 @@ rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 # temp2 = split_ident(temp1$obj, "s11", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
 # 
-# temp3 = split_ident(temp2$obj, "s122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp3 = split_ident(temp2$obj, "s112", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
 # 
-# temp4 = split_ident(temp3$obj, "s1212", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp4 = split_ident(temp3$obj, "s1121", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
 # 
-# temp5 = split_ident(temp4$obj, "s12121", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp5 = split_ident(temp4$obj, "s11211", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 
-library(SC3)
- sce = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds")
- #sce = sce_norm(curr_proc) #sce_norm(ceiling(merged_seur@raw.data))
- sce = sc3(sce, ks = c(2,4,8), biology = F, gene_filter = F)
+# library(SC3)
+# #  sce = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds")
 
-sc3_interactive(sce)
+# sce = sce_norm(curr_proc1) #sce_norm(ceiling(merged_seur@raw.data))
+# sce = sc3(sce, ks = c(2,4,8,16), biology = F, gene_filter = F)
+# table(sce@colData$X, sce@colData$sc3_16_clusters)
+
+
+
+  
+ # plot_seur(temp2$obj, method = "tsne")
 
 ```
 
-```{r}
-
-```
-
 
 ```{r}
-
-curr = rec_final1
+curr = temp4
 plot_seur(curr$obj)
 
 plot_seur(curr$obj, "pca")
 
-#sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
-
-sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 1)))
-
-sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 2)))
-
-sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 3)))
-
-sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 4)))
-
+# #sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
+# 
+# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 1)))
+# 
+# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 2)))
+# 
+# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 3)))
+# 
+# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 4)))
+# 
 # sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 5)))
 # 
 # sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 6)))
-
-plot_seur_3d(curr$obj, radius = 3, lvls = 4, method = "pca")
-
-
-markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]
-markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
+# 
+# plot_seur_3d(curr$obj, radius = 2, lvls = 5, method = "pca")
+# 
+# 
+# markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]
+# markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
 
 # rownames(markers_novo)
 # 
 # table(markers_novo$cluster)
+
+ DimPlot(curr$obj, reduction.use = "pca", group.by = "orig.ident", dim.1 = 1, dim.2 = 2)
+  
 ```
 
 
@@ -94,8 +98,6 @@ markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
 # tab = table(sce@colData$cell_type1, temp)
 # sort_diag(tab)
 
-
-#mclust::adjustedRandIndex()
 
 ```
 
