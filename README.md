@@ -1,6 +1,9 @@
 # CellPi
 
-Rus
+__Under development, not ready for a use__
+
+__English description will be uploaded with the first release__
+
 ```
 Инструкция:
 1) Установить пакеты через installer.Rmd
