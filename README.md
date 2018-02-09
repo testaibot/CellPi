@@ -6,9 +6,7 @@ __English description will be uploaded with the first release__
 
 The main idea of this pipeline is to take best-practice scRNA-seq data preprocessind tools and integrate them in a fully unsupervised pipeline "from GSE id to cluster's markers"
 
-GSE_id->read counts will be based on the mixture of https://github.com/hms-dbmi/dropEst and https://github.com/CGATOxford/UMI-tools
-
-Clustering step currently uses custom unsuperviced clustering. SC3 will be added as an alternative in a final version.
+`GSE_id->read counts` step will be based on the mixture of https://github.com/hms-dbmi/dropEst and https://github.com/CGATOxford/UMI-tools
 
 ```
 Инструкция:
