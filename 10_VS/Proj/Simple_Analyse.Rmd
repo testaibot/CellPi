@@ -12,30 +12,38 @@ rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 
 #temp = seurat_analyse_mtx(curr_assay, regress = F, regress_cc = NULL, do.magic = F, do.cluster = F)
 
-# temp = split_ident(CreateSeuratObject(raw.data = curr_proc1), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-# table(get_orig_ident(temp$obj), get_ident(temp$obj))
-# 
-# temp1 = split_ident(temp$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-# table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
-# 
-# temp2 = split_ident(temp1$obj, "s11", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-# table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
-# 
-# temp3 = split_ident(temp2$obj, "s112", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-# table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
-# 
-# temp4 = split_ident(temp3$obj, "s1121", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-# table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
-# 
-# temp5 = split_ident(temp4$obj, "s11211", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-# table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
+temp = split_ident(CreateSeuratObject(raw.data = curr_proc), regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp$obj), get_ident(temp$obj))
+
+temp1 = split_ident(temp$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
+
+temp2 = split_ident(temp1$obj, "s11", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "sc3")
+table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
+
+temp2b = split_ident(temp1$obj, "s11", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp2b$obj), get_ident(temp2b$obj))
+
+
+temp3 = split_ident(temp2$obj, "s111", regress = F, regress_cc = "cc_diff", do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
+
+temp4 = split_ident(temp3$obj, "s1122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
+
+temp5 = split_ident(temp4$obj, "s11211", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 
 # library(SC3)
 # #  sce = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds")
 
-# sce = sce_norm(curr_proc1) #sce_norm(ceiling(merged_seur@raw.data))
-# sce = sc3(sce, ks = c(2,4,8,16), biology = F, gene_filter = F)
-# table(sce@colData$X, sce@colData$sc3_16_clusters)
+sce = sce_norm(rel2abs(exprs(simple_preprocessing(sce_norm(curr_proc0)))))
+sce = SingleCellExperiment(assays = list(counts = mag), colData = get_types(colnames(mag)))
+rowData(sce)$feature_symbol = rownames(sce)
+sce = sce[!duplicated(rowData(sce)$feature_symbol), ]
+
+sce = sc3(sce, ks = c(2), biology = F, gene_filter = F)
+table(sce@colData$X, sce@colData$sc3_2_clusters)
 
 
 
@@ -46,10 +54,21 @@ rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.ma
 
 
 ```{r}
-curr = temp4
-plot_seur(curr$obj)
 
-plot_seur(curr$obj, "pca")
+
+  temp = split_ident(CreateSeuratObject(raw.data = curr_proc), regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "custom")
+print(table(get_orig_ident(temp$obj), get_ident(temp$obj)))
+
+plot_seur(temp$obj)
+
+  tempb = split_ident(CreateSeuratObject(raw.data = curr_proc), regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "sc3")
+print(table(get_orig_ident(tempb$obj), get_ident(tempb$obj)))
+
+plot_seur(tempb$obj)
+
+
+
+
 
 # #sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
 # 
@@ -74,29 +93,28 @@ plot_seur(curr$obj, "pca")
 # rownames(markers_novo)
 # 
 # table(markers_novo$cluster)
-
- DimPlot(curr$obj, reduction.use = "pca", group.by = "orig.ident", dim.1 = 1, dim.2 = 2)
   
 ```
 
 
 ```{r}
 
+temp1 = split_ident(curr$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "custom")
+table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
 
-# temp = sce$sc3_2_clusters
-# names(temp) = types2names(sce@colData$cell_type1)
-# tab = table(sce@colData$cell_type1 , temp)
-# sort_diag(tab)
-# 
-# temp = sce$sc3_4_clusters
-# names(temp) = types2names(sce@colData$cell_type1)
-# tab = table(sce@colData$cell_type1, temp)
-# sort_diag(tab)
-# 
-# temp = sce$sc3_8_clusters
-# names(temp) = types2names(sce@colData$cell_type1)
-# tab = table(sce@colData$cell_type1, temp)
-# sort_diag(tab)
+plot_seur(temp1$obj)
+
+temp1b = split_ident(curr$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F, method = "sc3")
+table(get_orig_ident(temp1b$obj), get_ident(temp1b$obj))
+
+plot_seur(temp1$obj)
+
+
+  tempb = split_ident(CreateSeuratObject(raw.data = curr_proc), regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "sc3")
+print(table(get_orig_ident(temp$obj), get_ident(temp$obj)))
+
+curr = tempb
+plot_seur(curr$obj)
 
 
 ```

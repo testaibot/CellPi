@@ -236,7 +236,7 @@ sort_by_rowcol_sum = function(A)
   return (sorted[rowSums(sorted)>0, colSums(sorted)>0])
 }
 
-rel2abs = function(mtx)
+rel2abs = function(mtx, first = T)
 {
   rel2abs_base = function(mtx)
   {
@@ -259,11 +259,22 @@ rel2abs = function(mtx)
     
     rpc_matrix = sort_by_rowcol_sum(na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = cores))))))
     
+    
+    cells_res = setdiff(colnames(mtx), colnames(rpc_matrix))
+    if(length(cells_res)>4 & first){
+      rpc_matrix_res = tryCatch(rel2abs(curr_proc4[,setdiff(colnames(curr_proc4), colnames(t4))], first = F), error = function(e){NULL})
+      if(!is.null(rpc_matrix_res))
+      {
+        rpc_matrix_res = merge_splits(x = rpc_matrix, y = rpc_matrix_res)
+      }
+      
+    }
+    
     return (rpc_matrix)
   }
   
-  norm = tryCatch(rel2abs_base(mtx), error = function(e){"e"})
-  if(typeof(norm) != "character")
+  norm = tryCatch(rel2abs_base(mtx), error = function(e){NULL})
+  if(!is.null(norm))
   {
     return(norm) 
   }
@@ -476,8 +487,8 @@ simple_preprocessing = function(sce, libsize = T, feature = T, mito = T, spikeIn
   }
   
   sce = sce[,!final_drop]
-  print(data.frame(ByLibSize = sum(libsize.drop), ByFeature = sum(feature.drop),
-                   ByMito = sum(mito.drop), BySpike = sum(spike.drop), Remaining = ncol(sce)))
+  
+  #print(data.frame(ByLibSize = sum(libsize.drop), ByFeature = sum(feature.drop),ByMito = sum(mito.drop), BySpike = sum(spike.drop), Remaining = ncol(sce)))
   
   #Computing separate size factors for spike-in transcripts if exists
   sce1 = tryCatch(computeSpikeFactors(sce, type = "ercc", general.use = FALSE), error = function(e) {"e"})
@@ -697,7 +708,7 @@ full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = 
     }
   }
   print("Merge splited")
-  sce_saver = 2^merge_splits(sce_saver)-1
+  sce_saver = rel2abs(merge_splits(sce_saver))
   print("Done...")
   saveRDS(sce_saver, file = "counts_final.rds")
   return(sce_saver)
@@ -885,10 +896,10 @@ try_assign_cell_cycle = function(object)
   return(object1)
 }
 
-seur_norm_regress = function(object, regress, regress_cc, nbin, cutoff)
+seur_norm_regress = function(object, regress, regress_cc)
 {
   object@meta.data[, "orig.ident"] = get_types(colnames(object@raw.data))
-  object = NormalizeData(object = object, normalization.method = NULL, display.progress = F)
+  object = NormalizeData(object = object, normalization.method = "LogNormalize", display.progress = F)
   vars_to_regress = NULL
   if(regress)
   {
@@ -920,120 +931,44 @@ seur_norm_regress = function(object, regress, regress_cc, nbin, cutoff)
     object = ScaleData(object = object, display.progress = F, check.for.norm = F)
   }
   
-  object = FindVariableGenes(object, display.progress = F, do.plot = F, x.low.cutoff = -Inf, x.high.cutoff = Inf, y.cutoff = cutoff, num.bin = nbin)
+  object = FindVariableGenes(object, display.progress = F, do.plot = F)
   
   return(object)
 }
 
 compute_pca = function(object)
 {
-  pc_seq = c(80, 70, 60, 50, 40, 30, 20, 15, 12, 10, 7, 6, 5, 4, 3)
+  pc_seq = c(30, 20, 15, 12, 10, 7, 6, 5, 4, 3)
   
   
   for(pc_use in pc_seq[pc_seq<ncol(object@raw.data)])
   {
     object1 = tryCatch(RunPCA(object = object, pc.genes = object@var.genes#rownames(object@raw.data)
                               , print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
-                       error = function(e) {"e"}, 
-                       warning = function(w) {"w"}
+                       error = function(e) {NULL}, 
+                       warning = function(w) {NULL}
     )
     
-    if(typeof(object1) !=  "character")
+    if(!is.null(object1))
     {
-      #print(paste0("Pc_use: ", pc_use))
-      # print(paste0("Determine statistical significance of PCA scores..."))
-      # object1 <- JackStraw(object1, num.pc = ncol(object1@dr$pca@cell.embeddings), num.replicate = 100, prop.freq = 0.1)
+      print(paste0("Pc_use: ", pc_use))
       return (object1)
     }
   }
   return (NULL)
 }
 
-select_good_PCs = function(object)
-{
-  
-  calc_pval = function(object, p_val = 1e-5)
-  {
-    pAll <- object@dr$pca@jackstraw@emperical.p.value
-    pAll <- pAll[, 1:ncol(object@dr$pca@cell.embeddings), drop = FALSE]
-    pAll <- as.data.frame(pAll)
-    
-    pcs_all = rep(1, ncol(object@dr$pca@cell.embeddings))
-    names(pcs_all) = 1:ncol(object@dr$pca@cell.embeddings)
-    
-    for (i in 1:ncol(object@dr$pca@cell.embeddings))
-    {
-      pc.score <- suppressWarnings(prop.test(
-        x = c(
-          length(which(pAll[, i] <= p_val)),
-          floor(nrow(pAll) * p_val)
-        ),
-        n = c(nrow(pAll), nrow(pAll))
-      )$p.val)
-      if (length(which(pAll[, i] <= p_val)) == 0) {
-        pc.score <- 1
-      }
-      pcs_all[i] = pc.score
-    }
-    
-    pcs_all = pcs_all[order(pcs_all)][which(pcs_all <= p_val)]
-    
-    return(pcs_all)
-  }
-  
-  p_val = 1e-2
-  pc_good = calc_pval(object, p_val = p_val)
-  # while(length(pc_good)>=5)
-  # {
-  #   if(p_val<=1e-8)
-  #   {
-  #     break
-  #   }
-  #   p_val = p_val/10
-  #   pc_good = calc_pval(object, p_val = p_val)
-  #   print(pc_good)
-  # }
-  # 
-  # while(length(pc_good)<=4)
-  # {
-  #   if(p_val == 1)
-  #   {
-  #     break
-  #   }
-  #   p_val = p_val*10
-  #   pc_good = calc_pval(object, p_val = p_val)
-  print(pc_good)
-  # }
-  
-  cat("PC_pval: ", p_val, "\n")
-  
-  # if(p_val == 1)
-  # {
-  #   return(NULL)
-  # }else{
-  return(sort(as.numeric(names(pc_good[1:5]))))
-  # }
-}
-
 compute_tsne = function(object, dim.embed = 2, reduction.use = "pca")
 {
-  init_plex = max(10, ncol(object@raw.data)/4)
+  init_plex = max(10, min(35,ncol(object@raw.data)/4))
   end_plex = 2
   step = (init_plex-end_plex)/5
   
-  
-  if(is.null(reduction.use))
+  if(is.null(object@dr[[reduction.use]]))
   {
-    genes.use = select_good_genes(object)
-  }else{
-    dim.use = 1:ncol(object@dr[[reduction.use]]@cell.embeddings)
+    object = compute_pca(object)
   }
-  
-  # if(reduction.use == "pca")
-  # {
-  #   dim.use = select_good_PCs(object)
-  # }
-  
+  dim.use = 1:ncol(object@dr[[reduction.use]]@cell.embeddings)
   
   for(perplex in unique(round(seq(init_plex, end_plex, -step))))
   {
@@ -1047,14 +982,14 @@ compute_tsne = function(object, dim.embed = 2, reduction.use = "pca")
     }else{
       
       object1 = tryCatch(RunTSNE(object = object, 
-                                 genes.use = genes.use,
+                                 genes.use = rownames(object@raw.data),
                                  dim.embed = dim.embed, check_duplicates = FALSE, perplexity = perplex),error = function(e) {NULL})
     }
     
     
     if(!is.null(object1))
     {
-      #print(paste0("perplex ", perplex))
+      print(paste0("perplex ", perplex))
       return(object1)
     }
   }
@@ -1064,16 +999,15 @@ compute_tsne = function(object, dim.embed = 2, reduction.use = "pca")
 
 compute_clustering = function(object, method = "min")
 {
-  #print("Compute tsne...")
-  
+  print("Compute tsne...")
   object = compute_tsne(object, dim.embed = 2, reduction.use = "pca")
-  #good_PC = select_good_PCs(object)
+  
   if(is.null(object)){
     return(NULL)
   }
   k.scale = 2
   
-  #print("Clustering...")
+  print("Clustering...")
   test_clustering = function(object, k.param = 10, k.scale = 2, target_clusters = 2)
   {
     test_cl = function(clusters)
@@ -1121,7 +1055,7 @@ compute_clustering = function(object, method = "min")
   direction = 1
   max_num = 1
   from = k.scale+1
-  to = from+100
+  to = ncol(object@raw.data)-1
   test_rez = NULL
   
   for(depth in max_num:0)
@@ -1185,13 +1119,12 @@ compute_clustering = function(object, method = "min")
             break
           }
         }else{
-          if (test_rez == 2) {
+          if (test_rez == 1) {
             to = from
             from = rez
             break
           }else if (test_rez == 0) {
             good_rez = rez
-            break
           }
         }
       }
@@ -1210,149 +1143,179 @@ compute_clustering = function(object, method = "min")
   return(object$obj)
 }
 
-compute_clustering_min = function(object, strict_binary = T)
+compute_clustering_sc3 = function(object)
 {
-  #print("Find optimal PCs...")
-  #good_PC = select_good_PCs(object)
-  #print(good_PC)
+  cl = GetClusters(object)
   
-  print("Compute tsne...")
+  #sc3 currently can't work with dgCMatrix
+  mtx = as.matrix(object@data)
+  sce = SingleCellExperiment(assays = list(logcounts = mtx), colData = get_types(colnames(mtx)))
+  rowData(sce)$feature_symbol = rownames(sce)
+  sce = sce[!duplicated(rowData(sce)$feature_symbol), ]
   
-  object = compute_tsne(object, dim.embed = 2)
-  
-  k.param_factor = 2
-  k.param = max(3, ncol(object@raw.data)/k.param_factor)
-  k.scale = 2
-  gran_shresh = k.scale
-  
-  print("Building SNN...")
-  object = FindClusters(object = object,
-                        dims.use = 1:ncol(object@dr$tsne@cell.embeddings)
-                        , reduction.type = "tsne", 
-                        resolution = 0, k.param = k.param, k.scale = k.scale, algorithm = 3, modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T, prune.SNN = 0, n.start = 10)
-  
-  print("Clustering...")
-  test_clustering = function(clusters)
+  sce = tryCatch(sc3(sce, ks = c(2), biology = F, gene_filter = F), error = function(e){
+    print(e)
+    NULL})
+  if(is.null(sce))
   {
-    if(length(clusters)<2)
-    {
-      return(2)
-    }else if(length(clusters)>= 2)
-    {
-      if(length(clusters) == 2)
-      {
-        if(min(clusters)>gran_shresh)
-        {
-          return(0)
-        }else{
-          return(2)
-        }
-      }else if(length(clusters) > 2)
-      {
-        if(length(which(clusters>gran_shresh)>1))
-        {
-          return(1)
-        }else{
-          return(NULL) 
-        }
-      }
-    }else{
-      return(-1)
-    }
+    return(NULL)
   }
   
-  good_rez = NULL
-  direction = 1
-  max_num = 10
-  from = 0
-  to = 30
-  test_rez = NULL
+  cl$cell.name = names(sce@colData$X)
+  cl$cluster = sce@colData$sc3_2_clusters
   
-  last_clusters = NULL
-  clusters = NULL
-  last_count = 1
-  
-  for(depth in 0:max_num)
-  {
-    if(from==to)
-    {
-      break
-    }
-    
-    for(rez in seq(from, to, direction*(10^-depth)))
-    {
-      if(!strict_binary)
-      {
-        if(!is.null(clusters) && !is.null(last_clusters) && all(as.vector(last_clusters)==as.vector(clusters)))
-        {
-          last_count = last_count+1
-        }else{
-          last_count = 1
-          last_clusters = clusters
-        }
-      }
-      
-      object = FindClusters(object = object, resolution = rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10, reuse.SNN = T)
-      
-      clusters = as.vector(table(get_ident(object)))
-      test_rez = test_clustering(clusters)
-      
-      #print(test_rez)
-      if(direction > 0)
-      {
-        if(is.null(test_rez)){
-          return(NULL)
-        }else if (test_rez == 2) {
-          next
-        }else if (test_rez == 0) {
-          good_rez = rez
-          break
-        }else if(test_rez == 1){
-          good_rez = rez
-          to = from
-          from = rez
-          break
-        }else if(test_rez == -1){
-          to = from
-          from = rez
-          break
-        }
-      }else{
-        if(is.null(test_rez)){
-          next
-        }else if (test_rez == 2) {
-          to = from
-          from = rez
-          break
-        }else if (test_rez == 0) {
-          good_rez = rez
-          break
-        }else if(test_rez == 1){
-          good_rez = rez
-          next
-        }else if(test_rez == -1){
-          next
-        }
-      }
-    }
-    
-    if(test_rez == 0 || (!strict_binary&&test_rez == 1))
-    {
-      break
-    }
-    direction = -direction
-  }
-  
-  object = FindClusters(object = object, resolution = good_rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10, reuse.SNN = T)
+  object = SetClusters(object, cl)
   
   return(object)
 }
 
+# compute_clustering_min = function(object, strict_binary = T)
+# {
+#   #print("Find optimal PCs...")
+#   #good_PC = select_good_PCs(object)
+#   #print(good_PC)
+#   
+#   print("Compute tsne...")
+# 
+#   object = compute_tsne(object, dim.embed = 2)
+#   
+#   k.param_factor = 2
+#   k.param = max(3, min(30, ncol(object@raw.data)/k.param_factor))
+#   k.scale = 25
+#   gran_shresh = k.scale
+#   
+#   print("Building SNN...")
+#   object = FindClusters(object = object,
+#                         dims.use = 1:ncol(object@dr$tsne@cell.embeddings)
+#                         , reduction.type = "tsne", 
+#                         resolution = 0, 
+#                         k.param = k.param, k.scale = k.scale, algorithm = 3, 
+#                         modularity.fxn = 1, print.output = F, save.SNN = T, force.recalc = T, 
+#                         #prune.SNN = 0, 
+#                         n.start = 10)
+#   
+#   print("Clustering...")
+#   test_clustering = function(clusters)
+#   {
+#     if(length(clusters)<2)
+#     {
+#       return(2)
+#     }else if(length(clusters)>= 2)
+#     {
+#       if(length(clusters) == 2)
+#       {
+#         if(min(clusters)>gran_shresh)
+#         {
+#           return(0)
+#         }else{
+#           return(2)
+#         }
+#       }else if(length(clusters) > 2)
+#       {
+#         if(length(which(clusters>gran_shresh)>1))
+#         {
+#           return(1)
+#         }else{
+#           return(NULL) 
+#         }
+#       }
+#     }else{
+#       return(-1)
+#     }
+#   }
+#   
+#   good_rez = NULL
+#   direction = 1
+#   max_num = 10
+#   from = 0
+#   to = 30
+#   test_rez = NULL
+#   
+#   last_clusters = NULL
+#   clusters = NULL
+#   last_count = 1
+#   
+#   for(depth in 0:max_num)
+#   {
+#     if(from==to)
+#     {
+#       break
+#     }
+#     
+#     for(rez in seq(from, to, direction*(10^-depth)))
+#     {
+#       if(!strict_binary)
+#       {
+#         if(!is.null(clusters) && !is.null(last_clusters) && all(as.vector(last_clusters)==as.vector(clusters)))
+#         {
+#           last_count = last_count+1
+#         }else{
+#           last_count = 1
+#           last_clusters = clusters
+#         }
+#       }
+#       
+#       object = FindClusters(object = object, resolution = rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10, reuse.SNN = T)
+#       
+#       clusters = as.vector(table(get_ident(object)))
+#       test_rez = test_clustering(clusters)
+#       
+#       #print(test_rez)
+#       if(direction > 0)
+#       {
+#         if(is.null(test_rez)){
+#             return(NULL)
+#         }else if (test_rez == 2) {
+#           next
+#         }else if (test_rez == 0) {
+#           good_rez = rez
+#           break
+#         }else if(test_rez == 1){
+#           good_rez = rez
+#           to = from
+#           from = rez
+#           break
+#         }else if(test_rez == -1){
+#           to = from
+#           from = rez
+#           break
+#         }
+#       }else{
+#         if(is.null(test_rez)){
+#           next
+#         }else if (test_rez == 2) {
+#           to = from
+#           from = rez
+#           break
+#         }else if (test_rez == 0) {
+#           good_rez = rez
+#           break
+#         }else if(test_rez == 1){
+#           good_rez = rez
+#           next
+#         }else if(test_rez == -1){
+#           next
+#         }
+#       }
+#     }
+#     
+#     if(test_rez == 0 || (!strict_binary&&test_rez == 1))
+#     {
+#       break
+#     }
+#     direction = -direction
+#   }
+#   
+#   object = FindClusters(object = object, resolution = good_rez, algorithm = 3, modularity.fxn = 1, print.output = F, n.start = 10, reuse.SNN = T)
+#   
+#   return(object)
+# }
 
-seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T)
+
+seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, method, do.cluster = T)
 {
   raw = object
-  object = exprs(sce_norm(raw))
+  object = rel2abs(exprs(simple_preprocessing(sce_norm(raw))))
   
   if(do.magic)
   {
@@ -1367,44 +1330,35 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster 
   
   object = CreateSeuratObject(raw.data = as(object, "dgCMatrix"))
   
-  #
-  # for(nbin in seq(10, 50, 10))
-  # {
-  #   for(cutoff in c(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1))
-  #   {
-  #     object1 = tryCatch(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw, nbin = round(ncol(object@raw.data)/nbin), cutoff = cutoff),error = function(e){NULL})
-  #     if(!is.null(object1)){
-  #     if(all(rowMins(table(get_orig_ident(object1), get_ident(object1)))!=0))
-  #       {
-  #       cat("\n mult: ", nbin," nbin: ", round(ncol(object@raw.data)/nbin), " cutoff: ", cutoff," F", "\n", sep = "\t")
-  #     }else if(all(rowMins(table(get_orig_ident(object1), get_ident(object1)))==0)){
-  #       cat("\n mult: ", nbin," nbin: ", round(ncol(object1@raw.data)/nbin), " cutoff: ", cutoff," T", "\n", sep = "\t")
-  #     }else if(any(rowMins(table(get_orig_ident(object1), get_ident(object1)))==0)){
-  #       cat("\n mult: ", nbin," nbin: ", round(ncol(object1@raw.data)/nbin), " cutoff: ", cutoff," TP", "\n", sep = "\t")
-  #     }
-  #     }
-  #   }
-  # }
-  
-  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw))
+  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw, method = method))
 }
 
-seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL, nbin = 20, cutoff = 0.2)
+seurat_analyse = function(object, regress, regress_cc, method, do.cluster = T, raw_before_magic = NULL)
 {
-  object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc, nbin = nbin, cutoff = cutoff)
+  object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
   
-  object1 = compute_pca(object)
-  if(!is.null(object1))
-  {
-    object = object1
-    rm(object1)
-  }else{
-    return("e")
-  }
+  # object1 = compute_pca(object)
+  # if(!is.null(object1))
+  # {
+  #   object = object1
+  #   rm(object1)
+  # }else{
+  #   return("e")
+  # }
   
   if(do.cluster)
   {
-    object1 = compute_clustering(object, method = "min")
+    if(method == "sc3")
+    {
+      object1 = compute_clustering_sc3(object)
+    }else if(method == "custom"){
+      object1 = compute_clustering(object, method = "min")
+    }else{
+      print("Unknown clustering method, Should be: 'sc3', 'custom'")
+      return(NULL)
+    }
+    
+    
     if(!is.null(object1))
     {
       object = object1
@@ -1455,7 +1409,7 @@ pick_last_char = function(x)
   return(substr(x, nchar(x), nchar(x)))
 }
 
-seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do.magic, search_markers)
+seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do.magic, search_markers, method)
 {
   if(!is.null(ident) && ident  == "SeuratProject"){
     ident = NULL
@@ -1467,7 +1421,7 @@ seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do
   }else{
     raw_data = object@raw.data[, get_cell_names_by_ident(object, ident)]
   }
-  return(list(object = raw_data, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers))
+  return(list(object = raw_data, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers, method = method))
 }
 
 finalize_no_split = function(object, ident)
@@ -1494,11 +1448,12 @@ seur_find_split = function(object)
   do.magic = object$do.magic
   raw_data = object$object
   search_markers = object$search_markers
+  method = object$method
   
   #curr_mult = get_copy_count(raw_data)
   if(is.null(ident) || pick_last_char(toString(ident)) !=  "f")
   {
-    object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T), error = function(e) {print(e)
+    object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T, method = method), error = function(e) {print(e)
       return("e")})
     if(typeof(object) !=  "character")
     {
@@ -1541,15 +1496,15 @@ seur_stat = function(object)
   plot_seur(object, method =  "pca")
 }
 
-split_ident = function(object, ident = NULL, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+split_ident = function(object, ident = NULL, regress = F, regress_cc = NULL, do.magic = F, search_markers = T, method = "sc3")
 {
-  param_list_for_ident = seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers)
+  param_list_for_ident = seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers, method = method)
   return(seur_find_split(param_list_for_ident))
 }
 
-split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
+split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F, search_markers = T, method = "sc3")
 {
-  parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic, search_markers = search_markers)})
+  parallel_list = lapply(unique(get_ident(object)), function(ident){ param_list_for_ident(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic, search_markers = search_markers, method = method)})
   
   #clean threads if the last run was terminated incorrectly
   tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
@@ -1615,6 +1570,10 @@ plot_seur<- function(object, method = "tsne")
   }else
     if(method  ==  "pca")
     {
+      if(is.null(object@dr$pca))
+      {
+        object = compute_pca(object)
+      }
       p1 = PCAPlot(object = object, group.by = "orig.ident", dim.1 = 1, dim.2 = 2, do.return = TRUE, pt.size = 1.5)
       p2 = PCAPlot(object = object, do.return = TRUE, dim.1 = 1, dim.2 = 2, pt.size = 1.5)
       plot_grid(p1, p2)
