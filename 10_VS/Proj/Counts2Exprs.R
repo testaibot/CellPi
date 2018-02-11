@@ -1383,8 +1383,11 @@ compute_clustering_sc3 = function(object)
 seurat_analyse_mtx = function(object, regress, regress_cc, do.renorm, do.magic, do.cluster = T)
 {
   raw = object
-  object = exprs(sce_norm(mtx_to_sce(raw), do.filter = T, spike.genes = NA))
-  raw = as(raw[,colnames(object)], "dgCMatrix")
+  if(do.renorm)
+  {
+    object = exprs(sce_norm(mtx_to_sce(raw), do.filter = T, spike.genes = NA))
+    raw = as(raw[,colnames(object)], "dgCMatrix")
+  }
   
   if(do.magic)
   {
