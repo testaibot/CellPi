@@ -1196,16 +1196,17 @@ compute_clustering = function(object, method = "min")
 
 compute_clustering_sc3 = function(object)
 {
+  target_cln = 2
   #sc3 currently can't work with dgCMatrix
   sce = mtx_to_sce(object@scale.data)
   logcounts(sce) = counts(sce)
   counts(sce) = NULL
   if(ncol(sce)>1000)
   {
-    sce = tryCatch(sc3(sce, ks = 2, biology = F, gene_filter = F, svm_num_cells = max(500, round(ncol(sce)/5))), error = function(e){
+    sce = tryCatch(sc3(sce, ks = target_cln, biology = F, gene_filter = F, svm_num_cells = max(500, round(ncol(sce)/5))), error = function(e){
       print(e)
       NULL})
-    sce = sc3_run_svm(sce, ks = 2)
+    sce = sc3_run_svm(sce, ks = target_cln)
   }else{
     sce = tryCatch({
       sc3(sce, ks = 2, biology = F, gene_filter = F)}
@@ -1219,13 +1220,22 @@ compute_clustering_sc3 = function(object)
     return(NULL)
   }
   
+  
+  
   cl = GetClusters(object)
   cl$cell.name = names(sce@colData$X)
-  cl$cluster = sce@colData$sc3_2_clusters
+  cl$cluster = sce@colData[[paste0("sc3_", target_cln, "_clusters")]]
   
   object = SetClusters(object, cl)
   
-  return(object)
+  if(length(table(get_ident(object)))==target_cln)
+  {
+    return(object)
+  }else{
+    return(NULL)
+  }
+  
+  
 }
 
 # compute_clustering_min = function(object, strict_binary = T)
@@ -1370,11 +1380,11 @@ compute_clustering_sc3 = function(object)
 #   return(object)
 # }
 
-seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T)
+seurat_analyse_mtx = function(object, regress, regress_cc, do.renorm, do.magic, do.cluster = T)
 {
   raw = object
-  #object = exprs(sce_norm(mtx_to_sce(raw), do.filter = T, spike.genes = NA))
-  #raw = as(raw[,colnames(object)], "dgCMatrix")
+  object = exprs(sce_norm(mtx_to_sce(raw), do.filter = T, spike.genes = NA))
+  raw = as(raw[,colnames(object)], "dgCMatrix")
   
   if(do.magic)
   {
@@ -1404,7 +1414,7 @@ seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_befor
   if(do.cluster)
   {
     object1 = compute_clustering_sc3(object)
-    if(is.null(object1)||clusters_mixed(object1))
+    if(is.null(object1) || clusters_mixed(object1))
     {
       object1 = compute_clustering(object, method = "min")
       if(is.null(object1))
@@ -1495,10 +1505,12 @@ seur_find_split = function(object)
   raw_data = object$object
   search_markers = object$search_markers
   
+  do.renorm = !is.null(ident)
+  
   #curr_mult = get_copy_count(raw_data)
   if(is.null(ident) || pick_last_char(toString(ident)) !=  "f")
   {
-    object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T), error = function(e) {
+    object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.renorm = do.renorm, do.magic = do.magic,  do.cluster = T), error = function(e) {
       print(e)
       return(NULL)})
     if(!is.null(object))
@@ -1651,7 +1663,7 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
       }
     }
     
-    object = seur_merge(split_all_ident(temp$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers))
+    object = seur_merge(split_all_ident(object$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers))
     
     final_markers = rbind(final_markers, object$mark)
     
