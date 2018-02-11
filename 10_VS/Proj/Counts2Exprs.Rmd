@@ -10,6 +10,7 @@
   library(biomaRt)    #genome annotations
   library(M3Drop)     #find DE genes
   library(Seurat)     #unsupervised clustering
+  library(SC3)
 
   library(VennDiagram)
   library(gplots)
@@ -257,28 +258,28 @@ types2names = function(types)
                                  lowerDetectionLimit = 0.1,
                                  expressionFamily = tobit(Lower = 0.1))
       
-      rpc_matrix = sort_by_rowcol_sum(na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = cores))))))
-      
-      
+      rpc_matrix = na.omit(t(na.omit(t(relative2abs(relative, t_estimate = estimate_t(exprs(relative)), method = "num_genes", cores = 1)))))
+
       cells_res = setdiff(colnames(mtx), colnames(rpc_matrix))
-      if(length(cells_res)>4 & first){
-        rpc_matrix_res = tryCatch(rel2abs(curr_proc4[,setdiff(colnames(curr_proc4), colnames(t4))], first = F), error = function(e){NULL})
+      
+      if(length(cells_res)>10 && first){
+        rpc_matrix_res = tryCatch(rel2abs_base(mtx[,cells_res], first = T), error = function(e){NULL})
         if(!is.null(rpc_matrix_res))
         {
-          rpc_matrix_res = merge_splits(x = rpc_matrix, y = rpc_matrix_res)
+          rpc_matrix = merge_splits(x = rpc_matrix, y = rpc_matrix_res)
         }
-
       }
       
       return (rpc_matrix)
     }
-    
+
     norm = tryCatch(rel2abs_base(mtx), error = function(e){NULL})
     if(!is.null(norm))
     {
       return(norm) 
+    }else{
+      return(t(rel2abs_base(t(mtx))))
     }
-    return(t(rel2abs_base(t(mtx))))
   }
   
   
@@ -305,7 +306,7 @@ types2names = function(types)
                               parallel = T, 
                               pred.genes = which(rownames(expr_new) %in% genes), 
                               nzero = max(10, ncol(expr_new)/20), 
-                              dfmax = 5 #limit netglm model complexity to speed-up computations
+                              dfmax = 10 #limit netglm model complexity to speed-up computations
                                          #should not affect result too much, cuz every gene processed separately in SAVER
                               )
     }
@@ -316,7 +317,7 @@ types2names = function(types)
                               size.factor = size_factors, 
                               pred.genes = which(rownames(expr_new) %in% genes), 
                               nzero = max(10, ncol(expr_new)/20),
-                              dfmax = 5
+                              dfmax = 10
                               )
     }
     
@@ -327,14 +328,15 @@ types2names = function(types)
     return (rpc_matrix_new)
   }
   
-  matrix_sum = function(A, B)
-  {
-    A[rownames(B), colnames(B)] = A[rownames(B), colnames(B)] + B[rownames(B), colnames(B)]
-    return (A)
-  }
+
   
   load_velocity_mtx = function(path)
   {
+    matrix_sum = function(A, B)
+    {
+      A[rownames(B), colnames(B)] = A[rownames(B), colnames(B)] + B[rownames(B), colnames(B)]
+      return (A)
+    }
     # Merge matrix of intron-exon matrix counts by gene name
     dropestOutput = readRDS(path)
 
@@ -414,8 +416,30 @@ types2names = function(types)
   
 
   
-  simple_preprocessing = function(sce, libsize = T, feature = T, mito = T, spikeIns = T)
+  sce_filter = function(sce, libsize = T, feature = T, mito = T, spikeIns = T, spike.genes = NULL)
   {
+    filter_simple = function(sce)
+    {
+      #Filter non-frequent cells and genes
+      lowerDetectionLimit_cell = 1
+      lowerDetectionLimit_gene = 1
+      numcells_sh = 3
+      numgenes_sh = 3
+      numcells = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_cell, byrow = T)
+      keep.gene = numcells >= numcells_sh
+      numgenes = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_gene, byrow = F)
+      keep.cell = numgenes >= numgenes_sh
+      sce = sce[keep.gene, keep.cell]
+      
+      #Filter genes that has flat expression profile
+      gene_levels_sh = 3
+      gene_levels_unique = apply(counts(sce), 1, FUN = unique)
+      gene_levels_lengths = unlist(lapply(gene_levels_unique, length))
+      sce = sce[names(which(gene_levels_lengths>=gene_levels_sh)),]
+
+      return(sce)
+    }
+    
     filter_mito = function (sce)
     {
       #MT QC
@@ -434,18 +458,33 @@ types2names = function(types)
       {
           is.mito = is.mito_offline
       }
+      
       return(rownames(sce)[which(is.mito)])
     }
     
-    filter_spikeIns = function(sce)
+    assign_spikeIns = function(sce, spike.genes)
     {
-      is.spike = (grepl("^ERCC-", rownames(sce)) | grepl("^ercc-", rownames(sce)))
+      if(is.null(spike.genes))
+      {
+        is.spike = (grepl("^ERCC-", rownames(sce)) | grepl("^ercc-", rownames(sce)))
+      }else{
+        if(is.na(spike.genes))
+        {
+          is.spike = list()
+        }
+        is.spike = spike.genes
+      }
       isSpike(sce, "ercc") = is.spike
-      return(rownames(sce)[which(is.spike)])
+      return(sce)
     }
     
-    sce = calculateQCMetrics(sce, exprs_values = "counts", feature_controls = list(mt = filter_mito(sce), ercc = filter_spikeIns(sce)),
-                            cell_controls = NULL, nmads = 3, pct_feature_controls_threshold = 80)
+    sce = filter_simple(sce)
+    sce = assign_spikeIns(sce, spike.genes = spike.genes)
+    
+    sce = calculateQCMetrics(sce, exprs_values = "counts", 
+                              feature_controls = list(mt = filter_mito(sce), 
+                              ercc = rownames(sce)[which(isSpike(sce, "ercc"))]),
+                              cell_controls = NULL, nmads = 3, pct_feature_controls_threshold = 80)
     
     final_drop = rep(F, ncol(sce))
     
@@ -467,10 +506,9 @@ types2names = function(types)
       }
     }
     
-    
     mito.drop = rep(F, ncol(sce))
     if(mito) {
-      mito.drop = isOutlier(sce$total_counts_mt, nmads = 3, type = "high", log = T)
+      mito.drop = isOutlier(sce$total_counts_mt, nmads = 3, type = "high", log = F)
       if(!is.na(sum(mito.drop)))
       {
         final_drop = mito.drop|final_drop
@@ -479,28 +517,17 @@ types2names = function(types)
     
     spike.drop = rep(F, ncol(sce))
     if(spikeIns) {
-      spike.drop = isOutlier(sce$total_counts_ercc, nmads = 3, type = "both", log = T)
+      spike.drop = isOutlier(sce$total_counts_ercc, nmads = 3, type = "both", log = F)
       if(!is.na(sum(spike.drop)))
       {
         final_drop = spike.drop|final_drop
       }
     }
     
+    #print(data.frame(spike.drop = length(which(spike.drop)), mito.drop = length(which(mito.drop)), feature.drop = length(which(feature.drop)), libsize.drop = length(which(libsize.drop))))
     sce = sce[,!final_drop]
     
-    #print(data.frame(ByLibSize = sum(libsize.drop), ByFeature = sum(feature.drop),ByMito = sum(mito.drop), BySpike = sum(spike.drop), Remaining = ncol(sce)))
-    
-    #Computing separate size factors for spike-in transcripts if exists
-    sce1 = tryCatch(computeSpikeFactors(sce, type = "ercc", general.use = FALSE), error = function(e) {"e"})
-    if(typeof(sce1) !=  "character")
-    {
-      sce = sce1
-    }
-  
-    #Deconvolution method to normalize genes with lots of zero-counts
-    sce = get_sum_factors(sce)
-    #print(summary(sizeFactors(sce)))
-    sce = normalise(sce)
+    sce = filter_simple(sce)
     
     return(sce)
   }
@@ -521,7 +548,7 @@ types2names = function(types)
     return(pairs)
   }
   
-  cell_cycle_decomposed_normalization = function(sce)
+  cell_cycle_decomposed_normalization = function(sce, spike.genes = NULL)
   {
     cyclone_mapping = function(sce, org, annot)
     {
@@ -548,17 +575,19 @@ types2names = function(types)
     {
       assignments = cyclone_mapping(sce, detected_genome$org, detected_genome$annot)
       
-      sce_g1 = sce[,which(assignments$normalized.scores$G1 >=  0.5)]
-      sce_g2m = sce[,which(assignments$normalized.scores$G2M >=  0.5)]
-      sce_s = sce[,which(assignments$normalized.scores$S >=  0.5)]
+      sce_g1 = sce[,which(assignments$normalized.scores$G1 >= 0.5)]
+      sce_g2m = sce[,which(assignments$normalized.scores$G2M >= 0.5)]
+      sce_s = sce[,which(assignments$normalized.scores$S >= 0.5)]
       
-      return(list(G1 = exprs(simple_preprocessing(sce_g1)), G2M = exprs(simple_preprocessing(sce_g2m)), S = exprs(simple_preprocessing(sce_s))))
+      return(list(G1 = sce_norm(sce_g1, do.filter = T, spike.genes = spike.genes), 
+                  G2M = sce_norm(sce_g2m, do.filter = T, spike.genes = spike.genes), 
+                  S = sce_norm(sce_s, do.filter = T, spike.genes = spike.genes)))
     }
     
     return("e")
   }
   
-  saver_two_path_impute = function(sce)
+  saver_two_path_impute = function(sce, spike.genes = NULL)
   {
       #detection of highly variable genes to reduce impute step required time
       #combine several methods to get best result after impute step
@@ -577,16 +606,16 @@ types2names = function(types)
         
         if(!is.null(imputed_genes0)&&!is.null(imputed_genes1))
         {
-          return(list(x = exprs(simple_preprocessing(imputed_genes0)), y = exprs(simple_preprocessing(imputed_genes1))))
+          return(list(x = sce_norm(imputed_genes0, do.filter = T, spike.genes = spike.genes), y = sce_norm(imputed_genes1, do.filter = T, spike.genes = spike.genes)))
         }
       }else{
         imputed_genes = tryCatch(saver_impute(counts(sce), size_factors = sizeFactors(sce)), error = function(e){NULL})
         if(!is.null(imputed_genes))
         {
-          return(exprs(simple_preprocessing(imputed_genes)))
+          return(sce_norm(imputed_genes, do.filter = T, spike.genes = spike.genes))
         }else{
           print("Impute error, normalized count matrix returned")
-          return(exprs(simple_preprocessing(sce)))
+          return(sce)
         }
       }
   }
@@ -594,82 +623,97 @@ types2names = function(types)
   
 get_sum_factors = function(sce)
 {
-  min_l = max(2, ncol(sce)/100)
-  max_l = min(ncol(sce)/10, 100)
-  norm_levels = unique(round(seq(min_l, max_l, (max_l - min_l)/10)))
+  min_l = max(2, (min(ncol(sce)/20, 5)))
+  max_l = min(ncol(sce)/5, 100)
 
+  norm_levels = sort(unique(round(seq(min_l, max_l, max(1, (max_l - min_l)/30)))))
+  
   sce = tryCatch(computeSumFactors(sce, sizes = norm_levels, positive = F),
                   warning = function(w)
-                  {computeSumFactors(sce, sizes = norm_levels, positive = T)})
+                  {
+                    print("Using inverse model for normalization. Can be slow on cells_count>1000")
+                    computeSumFactors(sce, sizes = norm_levels, positive = T)
+                  })
   return (sce)
 }
   
-sce_norm = function(mtx)
+mtx_to_sce = function(mtx)
 {
-  sce_norm_base = function(mtx)
-  {
-    filter_simple = function(sce, numgenes_sh = 2, numcells_sh = 2, lowerDetectionLimit_gene = 1, lowerDetectionLimit_cell = 1)
-    {
-      #Simple quality control on the cells
-      keep_feature_col = rowSums(counts(sce)>0) > 0
-      keep_feature_row = colSums(counts(sce)>0) > 0
-      sce = sce[keep_feature_col, keep_feature_row]
-      
-      numcells = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_cell, byrow = T)
-      keep.gene = numcells >= numcells_sh
+  mtx = as.matrix(mtx)
   
-      numgenes = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_gene, byrow = F)
-      keep.cell = numgenes >= numgenes_sh
-  
-      sce = sce[keep.gene, keep.cell]
-      return(sce)
-    }
+  sce = SingleCellExperiment(assays = list(counts = mtx), colData = get_types(colnames(mtx)))
+  rowData(sce)$feature_symbol = rownames(sce)
+  sce = sce[!duplicated(rowData(sce)$feature_symbol), ]
+  return(sce)
+}
 
-    sce_temp = SingleCellExperiment(assays = list(counts = mtx), colData = get_types(colnames(mtx)))
-    rowData(sce_temp)$feature_symbol = rownames(sce_temp)
-    sce_temp = sce_temp[!duplicated(rowData(sce_temp)$feature_symbol), ]
-    
-    sce_temp = filter_simple(sce_temp)
-  
-    sce_temp = tryCatch(get_sum_factors(sce_temp))
-  
-    #print(summary(sizeFactors(sce_temp)))
-    sce_temp<-normalise(sce_temp)
-    return(sce_temp)
-  }
-  
-  sce_temp = tryCatch(sce_norm_base(mtx), error = function(e){NULL})
-  if(is.null(sce_temp))
+sce_norm = function(sce, do.filter = T, spike.genes = NULL)
+{
+  if(do.filter)
   {
-    sce_temp = sce_norm_base(rel2abs(mtx))
+    sce = sce_filter(sce, spike.genes = spike.genes)
   }
   
-  return (sce_temp)
+  sce_norm_base = function(sce, spike.genes = NULL)
+  {
+    sce1 = get_sum_factors(sce)
+    if(!is.null(sce1))
+    {
+      sce = sce1
+    }else{
+      return(NULL)
+    }
+    
+    #Computing separate size factors for spike-in transcripts if exists
+    if(is.null(spike.genes)||!is.na(spike.genes))
+    {
+      sce1 = tryCatch(computeSpikeFactors(sce, type = "ercc", general.use = FALSE), error = function(e) {NULL})
+      if(!is.null(sce1))
+      {
+        sce = sce1
+      }
+    }
+    
+    sce<-normalise(sce)
+    return(sce)
+  }
+  
+  sce1 = sce_norm_base(sce, spike.genes = spike.genes)
+  if(!is.null(sce1))
+  {
+    return(sce1)
+  }else{
+    return(sce_norm_base(mtx_to_sce(rel2abs(counts(sce)))))
+  }
+  
 }
   
-full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = F, impute = F, clean = T)
+#' @title Read counts prerpocessing
+#'
+#' @param working_path directory to work with
+#' @param counts_mtx input matrix genes-rows, cells-columns
+#' @param cell_cycle Slow! Try to filter cells regarding cell cycle phases
+#'  Default: F.
+#' @param impute Very slow! Try to impute dropouts events using 'Saver'
+#'  Default: F.
+#'
+#' @export
+#'
+full_preprocess = function(counts_mtx = NULL, working_path = NULL, spike.genes = NULL, cell_cycle = F, impute = F)
 {
+  
   print("Loading data...")
-  dir.create(working_path, showWarnings = FALSE)
-  setwd(working_path)
-
-  counts_input = NULL
-  # Reuse final results if computed
-  if(clean)
+  if(is.null(working_path))
   {
-    unlink("counts_final.rds")
-    counts_input = counts_mtx
+    working_path = tempdir()
   }else{
-    counts_input = loadCountsRds("counts_final.rds")
+    dir.create(working_path, showWarnings = FALSE)
   }
   
+  setwd(working_path)
   
-  sce = sce_norm(counts_input)
-  print(dim(sce))
-  
-  print("Simple preprocessing...")
-  sce = simple_preprocessing(sce)
-  print(dim(sce))
+  print("Normalize...")
+  sce = sce_norm(mtx_to_sce(counts_mtx), do.filter = T, spike.genes = spike.genes)
   
   if(!cell_cycle && !impute)
   {
@@ -680,7 +724,7 @@ full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = 
     sce_cycled = "e"
     if(cell_cycle)
     {
-      sce_cycled = tryCatch(cell_cycle_decomposed_normalization(sce), error = function(e) {"e"})
+      sce_cycled = tryCatch(cell_cycle_decomposed_normalization(sce, spike.genes = spike.genes), error = function(e) {"e"})
     }
     
     if(typeof(sce_cycled) !=  "character")
@@ -689,10 +733,10 @@ full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = 
       if(impute)
       {
         print("SI")
-        sce_saver = lapply(sce_cycled, saver_two_path_impute)
+        sce_saver = lapply(sce_cycled, function(sce_set){return(exprs(saver_two_path_impute(sce_set, spike.genes = spike.genes)))})
       }else{
         print("S")
-        sce_saver = lapply(sce_cycled, function(sce_set){return(exprs(simple_preprocessing(sce_norm(sce_set))))})
+        sce_saver = lapply(sce_cycled, function(sce_set){return(exprs(sce_set))})
       }
     }
     else
@@ -708,9 +752,9 @@ full_preprocess = function(working_path = NULL, counts_mtx = NULL, cell_cycle = 
     }
   }
   print("Merge splited")
-  sce_saver = rel2abs(merge_splits(sce_saver))
+  sce_saver = merge_splits(sce_saver)
   print("Done...")
-  saveRDS(sce_saver, file = "counts_final.rds")
+  #saveRDS(sce_saver, file = "counts_final.rds")
   return(sce_saver)
 }
 ```
@@ -896,10 +940,10 @@ try_assign_cell_cycle = function(object)
   return(object1)
 }
 
-seur_norm_regress = function(object, regress, regress_cc)
+seur_norm_regress = function(object, regress, regress_cc, raw_before_magic)
 {
   object@meta.data[, "orig.ident"] = get_types(colnames(object@raw.data))
-  object = NormalizeData(object = object, normalization.method = "LogNormalize", display.progress = F)
+  object = NormalizeData(object = object, normalization.method = NULL, display.progress = F)
   vars_to_regress = NULL
   if(regress)
   {
@@ -933,6 +977,11 @@ seur_norm_regress = function(object, regress, regress_cc)
   
   object = FindVariableGenes(object, display.progress = F, do.plot = F)
   
+  if(!is.null(raw_before_magic))
+  {
+    object@raw.data <- raw_before_magic
+  }
+  
   return(object)
 }
 
@@ -943,9 +992,11 @@ compute_pca = function(object)
   
   for(pc_use in pc_seq[pc_seq<ncol(object@raw.data)])
   {
-    object1 = tryCatch(RunPCA(object = object, pc.genes = object@var.genes#rownames(object@raw.data)
+    object1 = tryCatch(RunPCA(object = object, pc.genes = rownames(object@raw.data)
                               , print.results = FALSE, pcs.print = NULL, do.print = F, pcs.compute = pc_use, rev.pca = F, weight.by.var = T),
-                      error = function(e) {NULL}, 
+                      error = function(e) {
+                        print(e)
+                        NULL}, 
                       warning = function(w) {NULL}
                       )
     
@@ -964,11 +1015,11 @@ compute_tsne = function(object, dim.embed = 2, reduction.use = "pca")
   end_plex = 2
   step = (init_plex-end_plex)/5
   
-  if(is.null(object@dr[[reduction.use]]))
+  if(is.null(object@dr[["pca"]]))
   {
     object = compute_pca(object)
   }
-  dim.use = 1:ncol(object@dr[[reduction.use]]@cell.embeddings)
+  dim.use = 1:ncol(object@dr[["pca"]]@cell.embeddings)
   
   for(perplex in unique(round(seq(init_plex, end_plex, -step))))
   {
@@ -1145,22 +1196,30 @@ compute_clustering = function(object, method = "min")
 
 compute_clustering_sc3 = function(object)
 {
-  cl = GetClusters(object)
-
   #sc3 currently can't work with dgCMatrix
-  mtx = as.matrix(object@data)
-  sce = SingleCellExperiment(assays = list(logcounts = mtx), colData = get_types(colnames(mtx)))
-  rowData(sce)$feature_symbol = rownames(sce)
-  sce = sce[!duplicated(rowData(sce)$feature_symbol), ]
-
-  sce = tryCatch(sc3(sce, ks = c(2), biology = F, gene_filter = F), error = function(e){
+  sce = mtx_to_sce(object@scale.data)
+  logcounts(sce) = counts(sce)
+  counts(sce) = NULL
+  if(ncol(sce)>1000)
+  {
+    sce = tryCatch(sc3(sce, ks = 2, biology = F, gene_filter = F, svm_num_cells = max(500, round(ncol(sce)/5))), error = function(e){
     print(e)
     NULL})
+    sce = sc3_run_svm(sce, ks = 2)
+  }else{
+    sce = tryCatch({
+    sc3(sce, ks = 2, biology = F, gene_filter = F)}
+    , error = function(e){
+    print(e)
+    NULL})
+  }
+  
   if(is.null(sce))
   {
     return(NULL)
   }
   
+  cl = GetClusters(object)
   cl$cell.name = names(sce@colData$X)
   cl$cluster = sce@colData$sc3_2_clusters
   
@@ -1311,11 +1370,11 @@ compute_clustering_sc3 = function(object)
 #   return(object)
 # }
 
-
-seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, method, do.cluster = T)
+seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, do.cluster = T)
 {
   raw = object
-  object = rel2abs(exprs(simple_preprocessing(sce_norm(raw))))
+  #object = exprs(sce_norm(mtx_to_sce(raw), do.filter = T, spike.genes = NA))
+  #raw = as(raw[,colnames(object)], "dgCMatrix")
   
   if(do.magic)
   {
@@ -1330,46 +1389,33 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.magic, method, do.
   
   object = CreateSeuratObject(raw.data = as(object, "dgCMatrix"))
 
-  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw, method = method))
+  return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw))
 }
 
-seurat_analyse = function(object, regress, regress_cc, method, do.cluster = T, raw_before_magic = NULL)
+clusters_mixed = function(object)
 {
-  object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc)
-  
-  # object1 = compute_pca(object)
-  # if(!is.null(object1))
-  # {
-  #   object = object1
-  #   rm(object1)
-  # }else{
-  #   return("e")
-  # }
+  return(F)
+}
+
+seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL)
+{
+  object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc, raw_before_magic = raw_before_magic)
   
   if(do.cluster)
   {
-    if(method == "sc3")
+    object1 = compute_clustering_sc3(object)
+    if(is.null(object1)||clusters_mixed(object1))
     {
-      object1 = compute_clustering_sc3(object)
-    }else if(method == "custom"){
       object1 = compute_clustering(object, method = "min")
+      if(is.null(object1))
+      {
+        return(NULL)
+      }else{
+        object = object1
+      }
     }else{
-      print("Unknown clustering method, Should be: 'sc3', 'custom'")
-      return(NULL)
+        object = object1
     }
-    
-    
-    if(!is.null(object1))
-    {
-      object = object1
-      rm(object1)
-    }else{
-      return("e")
-    }
-  }
-  if(!is.null(raw_before_magic))
-  {
-    object@raw.data <- raw_before_magic
   }
   
   return (object)
@@ -1409,7 +1455,7 @@ pick_last_char = function(x)
   return(substr(x, nchar(x), nchar(x)))
 }
 
-seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do.magic, search_markers, method)
+seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do.magic, search_markers)
 {
   if(!is.null(ident) && ident  == "SeuratProject"){
     ident = NULL
@@ -1421,7 +1467,7 @@ seur_get_raw_and_params = function(object, ident = NULL, regress, regress_cc, do
   }else{
     raw_data = object@raw.data[, get_cell_names_by_ident(object, ident)]
   }
-  return(list(object = raw_data, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers, method = method))
+  return(list(object = raw_data, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers))
 }
 
 finalize_no_split = function(object, ident)
@@ -1448,14 +1494,14 @@ seur_find_split = function(object)
   do.magic = object$do.magic
   raw_data = object$object
   search_markers = object$search_markers
-  method = object$method
   
   #curr_mult = get_copy_count(raw_data)
   if(is.null(ident) || pick_last_char(toString(ident)) !=  "f")
   {
-      object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T, method = method), error = function(e) {print(e)
-        return("e")})
-      if(typeof(object) !=  "character")
+      object = tryCatch(seurat_analyse_mtx(raw_data, regress = regress, regress_cc = regress_cc, do.magic = do.magic, do.cluster = T), error = function(e) {
+        print(e)
+        return(NULL)})
+      if(!is.null(object))
       {
         if(length(table(get_ident(object))) == ncol(raw_data))
         {
@@ -1496,22 +1542,22 @@ seur_stat = function(object)
   plot_seur(object, method =  "pca")
 }
 
-split_ident = function(object, ident = NULL, regress = F, regress_cc = NULL, do.magic = F, search_markers = T, method = "sc3")
+split_ident = function(object, ident = NULL, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
 {
-  param_list_for_ident = seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers, method = method)
+  param_list_for_ident = seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers)
   return(seur_find_split(param_list_for_ident))
 }
 
-split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F, search_markers = T, method = "sc3")
+split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F, search_markers = T)
 {
-  parallel_list = lapply(unique(get_ident(object)), function(ident){ param_list_for_ident(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic, search_markers = search_markers, method = method)})
+  parallel_list = lapply(unique(get_ident(object)), function(ident){ seur_get_raw_and_params(object, ident = ident, regress = regress, regress_cc =  regress_cc, do.magic = do.magic, search_markers = search_markers)})
   
   #clean threads if the last run was terminated incorrectly
-  tryCatch(doParallel::stopImplicitCluster(),error = function(e){NULL})
+  tryCatch(doParallel::stopImplicitCluster(), error = function(e){NULL})
   
   doParallel::registerDoParallel(cores = parallel::detectCores()-1)
   
-  parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = F)) %dopar% {
+  parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = T)) %dopar% {
       source('Counts2Exprs.R', local = TRUE)
       object = seur_find_split(object)
       return(object)
@@ -1524,7 +1570,7 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F,
 
 seur_merge = function(object)
 {
-  if(!is.null(object$obj)){
+  if(!is.null(names(object))){
     new_idents = GetClusters(object$obj)
     merged_object = object$obj
     mark = object$mark
@@ -1560,7 +1606,7 @@ plot_seur<- function(object, method = "tsne")
 {
   if(method  ==  "tsne")
   {
-    if(is.null(object@dr$tsne))
+    if(is.null(object@dr[["tsne"]]))
     {
       object = compute_tsne(object)
     }
@@ -1568,6 +1614,7 @@ plot_seur<- function(object, method = "tsne")
     p2 = TSNEPlot(object = object, do.return = TRUE, pt.size = 1.5)
     plot_grid(p1, p2)
   }else
+    
   if(method  ==  "pca")
   {
     if(is.null(object@dr$pca))
@@ -1593,15 +1640,18 @@ cluster_recursive = function(object, regress = F, regress_cc = NULL, do.magic = 
   print(sort_diag(table(get_orig_ident(object$obj), get_ident(object$obj))))
   final_markers = object$mark
   
-  while(any(sapply(sapply(get_ident(object$obj), toString), pick_last_char)!="f") || (!is.null(lvls)&&lvls>1))
+  while(any(sapply(sapply(get_ident(object$obj), toString), pick_last_char)!="f"))
   {
     if(!is.null(lvls))
     {
       lvls = lvls-1
+      
+      if(lvls<0){
+        break
+      }
     }
     
-    object = split_all_ident(object$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers)
-    object = seur_merge(object)
+    object = seur_merge(split_all_ident(object$obj, regress = regress, regress_cc = regress_cc, do.magic = do.magic, search_markers = search_markers))
 
     final_markers = rbind(final_markers, object$mark)
     
@@ -1764,3 +1814,5 @@ plot_seur_3d = function(object, method = "tsne", radius = 0.3, lvls = NULL, old_
 # }
 
 ```
+
+
