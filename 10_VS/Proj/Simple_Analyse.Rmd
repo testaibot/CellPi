@@ -3,34 +3,35 @@
 ```{r}
 
 #search_markers is SLOW
-#rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
+#rec_final_emat = cluster_recursive(emat, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
 
-temp = split_ident(CreateSeuratObject(raw.data = curr_proc5), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-table(get_orig_ident(temp$obj), get_ident(temp$obj))
-
-temp1 = split_ident(temp$obj, "s1", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
-
-temp2 = split_ident(temp1$obj, "s12", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
-
-temp2b = split_ident(temp1$obj, "s11", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-table(get_orig_ident(temp2b$obj), get_ident(temp2b$obj))
-
-temp3 = split_ident(temp2$obj, "s111", regress = F, regress_cc = "cc_diff", do.magic = F, search_markers = F)
-table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
-
-temp4 = split_ident(temp3$obj, "s1122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
-
-temp5 = split_ident(temp4$obj, "s11211", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
-table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
+# temp = split_ident(CreateSeuratObject(raw.data = curr_proc0), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp$obj), get_ident(temp$obj))
+# table(get_ident(temp$obj))
+# 
+# temp1 = split_ident(temp$obj, "s2", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
+# table(get_ident(temp1$obj))
+# 
+# temp2 = split_ident(temp1$obj, "s12", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
+# table(get_ident(temp2$obj))
+# 
+# temp3 = split_ident(temp2$obj, "s122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
+# 
+# temp4 = split_ident(temp3$obj, "s1221", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
+# 
+# temp5 = split_ident(temp4$obj, "s122f", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 
 # library(SC3)
 # #  sce = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds")
@@ -45,8 +46,7 @@ table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 
 
 # library(SC3)
-# 
-
+#
 
 ```
 
@@ -54,6 +54,7 @@ table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
 plot_seur(temp$obj)
 plot_seur(temp1$obj)
 plot_seur(temp2$obj)
+plot_seur(temp3$obj)
 ```
 
 

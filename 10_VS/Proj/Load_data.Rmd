@@ -150,6 +150,8 @@ curr_proc4 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/out
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds"))
 curr_proc5 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/kolodziejczyk/", counts_mtx  =  curr_assay)
 
+# dat <- readRDS(url("http://pklab.med.harvard.edu/velocyto/mouseBM/cell.counts.matrices.rds"))
+# emat = full_preprocess(counts_mtx = dat$exon)
 ```
 
 
@@ -186,11 +188,5 @@ curr_proc5 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/out
 # 
 # final_exprs = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine", counts_mtx  =  d)
 
-dat <- readRDS(url("http://pklab.med.harvard.edu/velocyto/mouseBM/cell.counts.matrices.rds"))
-library(velocyto.R)
-
-emat = full_preprocess(counts_mtx = dat$exon)
-#nmat = full_preprocess(counts_mtx = dat$intron)
-#smat = full_preprocess(counts_mtx = dat$spanning)
 
 ```

@@ -423,8 +423,8 @@ types2names = function(types)
       #Filter non-frequent cells and genes
       lowerDetectionLimit_cell = 1
       lowerDetectionLimit_gene = 1
-      numcells_sh = 3
-      numgenes_sh = 3
+      numcells_sh = 2
+      numgenes_sh = 2
       numcells = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_cell, byrow = T)
       keep.gene = numcells >= numcells_sh
       numgenes = nexprs(sce, lowerDetectionLimit = lowerDetectionLimit_gene, byrow = F)
@@ -432,11 +432,10 @@ types2names = function(types)
       sce = sce[keep.gene, keep.cell]
       
       #Filter genes that has flat expression profile
-      gene_levels_sh = 3
+      gene_levels_sh = 4
       gene_levels_unique = apply(counts(sce), 1, FUN = unique)
       gene_levels_lengths = unlist(lapply(gene_levels_unique, length))
       sce = sce[names(which(gene_levels_lengths>=gene_levels_sh)),]
-
       return(sce)
     }
     
@@ -621,19 +620,27 @@ types2names = function(types)
   }
 
   
-get_sum_factors = function(sce)
+get_sum_factors = function(sce, force = F)
 {
-  min_l = max(2, (min(ncol(sce)/20, 5)))
-  max_l = min(ncol(sce)/5, 100)
-
-  norm_levels = sort(unique(round(seq(min_l, max_l, max(1, (max_l - min_l)/30)))))
+  norm_levels = seq(5,100,5)
+  if(ncol(sce)<200)
+  {
+    norm_levels = unique(round(norm_levels/400*ncol(sce)))
+    norm_levels = norm_levels[norm_levels>1]
+  }
   
   sce = tryCatch(computeSumFactors(sce, sizes = norm_levels, positive = F),
                   warning = function(w)
                   {
-                    print("Using inverse model for normalization. Can be slow on cells_count>1000")
-                    computeSumFactors(sce, sizes = norm_levels, positive = T)
+                    if(ncol(sce)<200 || force)
+                    {
+                      print("Using inverse model for normalization")
+                      print("\tCan be very slow for n_cells>500")
+                      print(paste0("Cells: ", ncol(sce), "\n"))
+                      return(computeSumFactors(sce, sizes = norm_levels, positive = T))
+                    }
                   })
+
   return (sce)
 }
   
@@ -654,9 +661,9 @@ sce_norm = function(sce, do.filter = T, spike.genes = NULL)
     sce = sce_filter(sce, spike.genes = spike.genes)
   }
   
-  sce_norm_base = function(sce, spike.genes = NULL)
+  sce_norm_base = function(sce, spike.genes = NULL, force = F)
   {
-    sce1 = get_sum_factors(sce)
+    sce1 = get_sum_factors(sce, force = force)
     if(!is.null(sce1))
     {
       sce = sce1
@@ -667,23 +674,21 @@ sce_norm = function(sce, do.filter = T, spike.genes = NULL)
     #Computing separate size factors for spike-in transcripts if exists
     if(is.null(spike.genes)||!is.na(spike.genes))
     {
-      sce1 = tryCatch(computeSpikeFactors(sce, type = "ercc", general.use = FALSE), error = function(e) {NULL})
-      if(!is.null(sce1))
-      {
-        sce = sce1
-      }
+      sce = tryCatch(computeSpikeFactors(sce, type = "ercc", general.use = FALSE), error = function(e) {NULL})
     }
-    
+
     sce<-normalise(sce)
     return(sce)
   }
-  
-  sce1 = sce_norm_base(sce, spike.genes = spike.genes)
+
+  sce1 = sce_norm_base(sce, spike.genes = spike.genes, force = F)
   if(!is.null(sce1))
   {
     return(sce1)
   }else{
-    return(sce_norm_base(mtx_to_sce(rel2abs(counts(sce)))))
+    sce = mtx_to_sce(rel2abs(counts(sce)))
+    sce = sce_norm_base(sce, spike.genes = spike.genes, force = T)
+    return(sce)
   }
   
 }
@@ -943,7 +948,7 @@ try_assign_cell_cycle = function(object)
 seur_norm_regress = function(object, regress, regress_cc, raw_before_magic)
 {
   object@meta.data[, "orig.ident"] = get_types(colnames(object@raw.data))
-  object = NormalizeData(object = object, normalization.method = NULL, display.progress = F)
+  object = NormalizeData(object = object, normalization.method = NULL, display.progress = F, scale.factor = 1)
   vars_to_regress = NULL
   if(regress)
   {
@@ -975,7 +980,7 @@ seur_norm_regress = function(object, regress, regress_cc, raw_before_magic)
     object = ScaleData(object = object, display.progress = F, check.for.norm = F)
   }
   
-  object = FindVariableGenes(object, display.progress = F, do.plot = F)
+  #object = FindVariableGenes(object, display.progress = F, do.plot = F)
   
   if(!is.null(raw_before_magic))
   {
@@ -1105,7 +1110,13 @@ compute_clustering = function(object, method = "min")
   good_rez = NULL
   direction = 1
   max_num = 1
-  from = k.scale+1
+  
+  if(ncol(object@raw.data)<20)
+  {
+    max_num =0
+  }
+  
+  from = min(ncol(object@raw.data)-1, k.scale+1)
   to = ncol(object@raw.data)-1
   test_rez = NULL
 
@@ -1201,15 +1212,27 @@ compute_clustering_sc3 = function(object)
   sce = mtx_to_sce(object@scale.data)
   logcounts(sce) = counts(sce)
   counts(sce) = NULL
-  if(ncol(sce)>1000)
+  if(ncol(sce)>100)
   {
-    sce = tryCatch(sc3(sce, ks = target_cln, biology = F, gene_filter = F, svm_num_cells = max(500, round(ncol(sce)/5))), error = function(e){
-    print(e)
-    NULL})
-    sce = sc3_run_svm(sce, ks = target_cln)
+    cell_to_use = max(min(300, round(ncol(sce)/3)), min(50, ncol(sce)))
+  
+    sce = tryCatch(sc3(sce, ks = target_cln, biology = F, gene_filter = F, 
+                       svm_num_cells = cell_to_use, n_cores = 2), error = function(e){
+                         print(paste0("SVM_err: ", e)) 
+                         return(NULL)})
+    
+    if(is.null(sce))
+    {
+      return(NULL)
+    }
+    if(cell_to_use < ncol(sce))
+    {
+      sce = sc3_run_svm(sce, ks = target_cln)
+    }
+    
   }else{
     sce = tryCatch({
-    sc3(sce, ks = 2, biology = F, gene_filter = F)}
+    sc3(sce, ks = 2, biology = F, gene_filter = F, n_cores = 2)}
     , error = function(e){
     print(e)
     NULL})
@@ -1385,7 +1408,7 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.renorm, do.magic, 
   raw = object
   if(do.renorm)
   {
-    object = exprs(sce_norm(mtx_to_sce(raw), do.filter = T, spike.genes = NA))
+    object = exprs(sce_norm(mtx_to_sce(2^raw-1), do.filter = F, spike.genes = NA))
     raw = as(raw[,colnames(object)], "dgCMatrix")
   }
   
@@ -1413,7 +1436,7 @@ clusters_mixed = function(object)
 seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL)
 {
   object = seur_norm_regress(object, regress = regress, regress_cc = regress_cc, raw_before_magic = raw_before_magic)
-  
+
   if(do.cluster)
   {
     object1 = compute_clustering_sc3(object)
@@ -1570,7 +1593,7 @@ split_all_ident = function(object, regress = F, regress_cc = NULL, do.magic = F,
   #clean threads if the last run was terminated incorrectly
   tryCatch(doParallel::stopImplicitCluster(), error = function(e){NULL})
   
-  doParallel::registerDoParallel(cores = parallel::detectCores()-1)
+  doParallel::registerDoParallel(cores = parallel::detectCores()/2-1)
   
   parallel_list = foreach(object = parallel_list, .options.snow = list(preschedule = T)) %dopar% {
       source('Counts2Exprs.R', local = TRUE)
