@@ -2,7 +2,7 @@
 
 __Under development, not ready for a use__
 
-__English description will be uploaded with the first release__
+__English description and license will be uploaded with the first release__
 
 The main idea of this pipeline is to take best-practice scRNA-seq data preprocessind tools and integrate them in a fully unsupervised pipeline "from GSE id to cluster's markers"
 
