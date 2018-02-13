@@ -1,7 +1,7 @@
 # CellPi
+__Development on hold until Feb 25__
 
-__Under development, not ready for a use__
-
+__Under development, not ready for a general use, seem to perform well on gold-standard datasets__
 __English description and license will be uploaded with the first release__
 
 The main idea of this pipeline is to take best-practice scRNA-seq data preprocessind tools and integrate them in a fully unsupervised pipeline "from GSE id to cluster's markers"
