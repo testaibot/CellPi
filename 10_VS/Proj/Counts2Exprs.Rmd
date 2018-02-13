@@ -1053,7 +1053,7 @@ compute_tsne = function(object, dim.embed = 2, reduction.use = "pca")
 }
 
 
-compute_clustering = function(object, method = "min")
+compute_clustering = function(object, method = "min", granulality_shresh = 2)
 {
   print("Compute tsne...")
   object = compute_tsne(object, dim.embed = 2, reduction.use = "pca")
@@ -1061,7 +1061,7 @@ compute_clustering = function(object, method = "min")
   if(is.null(object)){
     return(NULL)
   }
-  k.scale = 2
+  k.scale = granulality_shresh
   
   print("Clustering...")
   test_clustering = function(object, k.param = 10, k.scale = 2, target_clusters = 2)
@@ -1212,9 +1212,9 @@ compute_clustering_sc3 = function(object)
   sce = mtx_to_sce(object@scale.data)
   logcounts(sce) = counts(sce)
   counts(sce) = NULL
-  if(ncol(sce)>100)
+  if(ncol(sce)>300)
   {
-    cell_to_use = max(min(300, round(ncol(sce)/3)), min(50, ncol(sce)))
+    cell_to_use = max(min(300, round(ncol(sce)/3)), min(100, ncol(sce)))
   
     sce = tryCatch(sc3(sce, ks = target_cln, biology = F, gene_filter = F, 
                        svm_num_cells = cell_to_use, n_cores = 2), error = function(e){
@@ -1225,6 +1225,7 @@ compute_clustering_sc3 = function(object)
     {
       return(NULL)
     }
+    
     if(cell_to_use < ncol(sce))
     {
       sce = sc3_run_svm(sce, ks = target_cln)
@@ -1428,9 +1429,14 @@ seurat_analyse_mtx = function(object, regress, regress_cc, do.renorm, do.magic, 
   return(seurat_analyse(object, regress = regress, regress_cc = regress_cc, do.cluster = do.cluster, raw_before_magic = raw))
 }
 
-clusters_mixed = function(object)
+clusters_mixed = function(object, granulality_shresh = 3)
 {
-  return(F)
+  if(min(table(get_ident(object)))>=granulality_shresh)
+  {
+    return(F)
+  }else{
+    return(T)
+  }
 }
 
 seurat_analyse = function(object, regress, regress_cc, do.cluster = T, raw_before_magic = NULL)
