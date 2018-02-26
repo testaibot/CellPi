@@ -1,5 +1,4 @@
 # CellPi
-__Development on hold until Feb 25__
 
 __Under development, not ready for a general use, seem to perform well on gold-standard datasets__
 __English description and license will be uploaded with the first release__
