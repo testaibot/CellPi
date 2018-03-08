@@ -1,125 +1,159 @@
-
-
 ```{r}
-
 #search_markers is SLOW
-rec_final = cluster_recursive(curr_proc, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-rec_final0 = cluster_recursive(curr_proc0, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-rec_final1 = cluster_recursive(curr_proc1, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-rec_final2 = cluster_recursive(curr_proc2, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-rec_final3 = cluster_recursive(curr_proc3, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-rec_final4 = cluster_recursive(curr_proc4, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-rec_final5 = cluster_recursive(curr_proc5, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
-#rec_final_emat = cluster_recursive(emat, regress = F, regress_cc = NULL, do.magic = F, search_markers = F, lvls = 4)
 
-# temp = split_ident(CreateSeuratObject(raw.data = curr_proc0), regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# rec_final0 = cluster_recursive(curr_proc0, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final1 = cluster_recursive(curr_proc1, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+rec_final2 = cluster_recursive(curr_proc2, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+rec_final3 = cluster_recursive(curr_proc3, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+rec_final4 = cluster_recursive(curr_proc4, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+rec_final5 = cluster_recursive(curr_proc5, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+rec_final6 = cluster_recursive(curr_proc6, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+rec_final7 = cluster_recursive(curr_proc7, regress = T, regress_cc = "cc_diff", do.magic = F, search_markers = T, lvls = 4)
+# rec_final8 = cluster_recursive(curr_proc8, regress = F, regress_cc = NULL, do.magic = F, search_markers = T, lvls = NULL)
+
+rec_final1_m = cluster_recursive(curr_proc1, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final2_m = cluster_recursive(curr_proc2, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final3_m = cluster_recursive(curr_proc3, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final4_m = cluster_recursive(curr_proc4, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final5_m = cluster_recursive(curr_proc5, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final6_m = cluster_recursive(curr_proc6, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+rec_final7_m = cluster_recursive(curr_proc7, regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T, lvls = 4)
+
+
+# saveRDS(rec_final7, file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Processed_with_markers\\kolodziejczyk.rds")
+
+# temp = split_ident(CreateSeuratObject(raw.data = curr_proc1), regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = T)
 # table(get_orig_ident(temp$obj), get_ident(temp$obj))
 # table(get_ident(temp$obj))
 # 
-# temp1 = split_ident(temp$obj, "s2", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp_m = split_ident(CreateSeuratObject(raw.data = curr_proc1), regress = F, regress_cc = NULL, do.magic = T, search_markers = T)
+# table(get_orig_ident(temp$obj), get_ident(temp$obj))
+# table(get_ident(temp$obj))
+ 
+# temp1 = split_ident(temp$obj, "s2", regress = T, regress_cc = "cc_diff", do.magic = T, search_markers = F)
 # table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
 # table(get_ident(temp1$obj))
 # 
-# temp2 = split_ident(temp1$obj, "s12", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp2 = split_ident(temp1$obj, "s21", regress = F, regress_cc = NULL, do.magic = T, search_markers = F)
 # table(get_orig_ident(temp2$obj), get_ident(temp2$obj))
 # table(get_ident(temp2$obj))
 # 
-# temp3 = split_ident(temp2$obj, "s122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp3 = split_ident(temp2$obj, "s212", regress = F, regress_cc = NULL, do.magic = T, search_markers = F)
 # table(get_orig_ident(temp3$obj), get_ident(temp3$obj))
 # 
-# temp4 = split_ident(temp3$obj, "s1221", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp4 = split_ident(temp3$obj, "s3122", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp4$obj), get_ident(temp4$obj))
 # 
-# temp5 = split_ident(temp4$obj, "s122f", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
+# temp5 = split_ident(temp4$obj, "s22221", regress = F, regress_cc = NULL, do.magic = F, search_markers = F)
 # table(get_orig_ident(temp5$obj), get_ident(temp5$obj))
-
-# library(SC3)
-# #  sce = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds")
-
-# sce = sce_norm(mtx_2_sce(curr_proc0))
-# sce = SingleCellExperiment(assays = list(counts = mag), colData = get_types(colnames(mag)))
-# rowData(sce)$feature_symbol = rownames(sce)
-# sce = sce[!duplicated(rowData(sce)$feature_symbol), ]
-# 
-# sce = sc3(sce, ks = c(2), biology = F, gene_filter = F)
-# table(sce@colData$X, sce@colData$sc3_2_clusters)
-
-
-# library(SC3)
-#
 
 ```
 
 ```{r}
+temp_nom$mark[order(temp_nom$mark$avg_logFC),]
+temp$mark[order(temp$mark$avg_logFC),]
+```
+
+
+```{r}
+#plot_seur(rec_final0$obj)
 plot_seur(temp$obj)
 plot_seur(temp1$obj)
 plot_seur(temp2$obj)
 plot_seur(temp3$obj)
+plot_seur(rec_final5$obj)
+plot_seur(rec_final6$obj)
+plot_seur(object1)
+#plot_seur(rec_final8$obj)
+
+object_t = CreateSeuratObject(temp$obj@raw.data[,get_cell_names_by_ident(temp$obj,"s2")])
+
+#plot_seur_3d(temp)
 ```
 
 
 ```{r}
+curr = readRDS(file = "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Processed_with_markers\\kolodziejczyk.rds")
 
-temp = split_ident(CreateSeuratObject(raw.data = curr_proc), regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "custom")
-print(table(get_orig_ident(temp$obj), get_ident(temp$obj)))
+library(fgsea)
+library(PANTHER.db)
+library(GO.db)
 
-plot_seur(temp$obj)
+# "CLASS_ID|CLASS_TERM|COMPONENT_ID|COMPONENT_TERM|CONFIDENCE_CODE|ENTREZ|EVIDENCE|EVIDENCE_TYPE|FAMILY_ID|FAMILY_TERM|GOSLIM_ID|GOSLIM_TERM|PATHWAY_ID|PATHWAY_TERM|SPECIES|SUBFAMILY_TERM|UNIPROT"
+# 
 
-tempb = split_ident(CreateSeuratObject(raw.data = curr_proc), regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "sc3")
-print(table(get_orig_ident(tempb$obj), get_ident(tempb$obj)))
-
-plot_seur(tempb$obj)
-
-
-
+pathways <- readRDS("GO_mouse_dataset.rds")
+head(pathways)
 
 
-# #sort_diag(table(get_orig_ident(curr$obj), get_ident(curr$obj)))
-# 
-# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 1)))
-# 
-# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 2)))
-# 
-# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 3)))
-# 
-# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 4)))
-# 
-# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 5)))
-# 
-# sort_diag(table(get_orig_ident(curr$obj), substr(sapply(get_ident(curr$obj),toString), start = 1, stop = 6)))
-# 
-# plot_seur_3d(curr$obj, radius = 2, lvls = 5, method = "pca")
-# 
-# 
-# markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01),]
-# markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
+markers<-curr$mark
 
-# rownames(markers_novo)
-# 
-# table(markers_novo$cluster)
+genome = detect_genome(markers$gene)
+#pthOrganisms(PANTHER.db) <- toupper(genome$org)
+
+symbol_converted = gene_annot_convert_to(markers$gene, org = genome$org, annot = genome$annot, new_encoding = "symbol")
+markers$gene_symbol = symbol_converted$new[match(markers$gene, symbol_converted$old)]
+markers = markers[which(!is.na(markers$gene_symbol)),]
+
+head(markers)
+head(names(pathways))
+head(pathways)
+
+```
+
+```{r}
+
+clusters = levels(markers$cluster)
+l = NULL
+i = 0
+
+for (cluster in clusters){
   
+  try({
+  i=i+1
+  cl_ranked_list = markers[markers$cluster == cluster,]$avg_logFC*-log10(markers[markers$cluster == cluster,]$p_val_adj)
+  names(cl_ranked_list) = markers[markers$cluster == cluster,]$gene_symbol
+  cl_ranked_list = sort(cl_ranked_list, decreasing = T)
+  cl_fgseaRes = fgsea(pathways = pathways,
+                  stats = cl_ranked_list,
+                  nperm=1000)
+  cl_fgseaRes = cl_fgseaRes[order(padj, decreasing = T)]
+  cl_fgseaRes$cluster = rep(cluster, nrow(cl_fgseaRes))
+  
+  l = rbind(l, cl_fgseaRes)
+  
+  # topPathwaysUp = cl_fgseaRes[ES > 0][head(order(pval), n=10), pathway]
+  # l[[i]] = plotGseaTable(pathways[topPathwaysUp], cl_ranked_list, cl_fgseaRes,
+  #             gseaParam = 0.5, colwidths = c(10,2,2,2,2))
+  })
+}
+
+print(l[order(padj)])
+
+plot(sort(l$padj))
+plot(sort(markers$p_val))
+
+
+```
+
+```{r}
+png("GSEA.png", height = 3800, width = 3800)
+cowplot::plot_grid(plotlist = l, labels = clusters, label_size = 30)
+
 ```
 
 
 ```{r}
-curr = temp1b
-
-temp1 = split_ident(curr$obj, "s11", regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "custom")
-table(get_orig_ident(temp1$obj), get_ident(temp1$obj))
-
-plot_seur(temp1$obj)
-
-temp1b = split_ident(curr$obj, "s11", regress = F, regress_cc = NULL, do.magic = T, search_markers = F, method = "sc3")
-table(get_orig_ident(temp1b$obj), get_ident(temp1b$obj))
-
-plot_seur(temp1b$obj)
-
-
-
-```
-
-
-```{r}
+curr = rec_final6
+threh_low = 0.9
+threh_hihg = 0.9
+markers_novo = curr$mark[which(curr$mark$p_val_adj<0.01
+  #                              &(
+  # (curr$mark$pct.1>=threh_hihg&curr$mark$pct.2<=threh_low&curr$mark$pct.2>=(threh_low-0.1))
+  # |(curr$mark$pct.1<=threh_low&curr$mark$pct.1>=(threh_low-0.1)&curr$mark$pct.2>=threh_hihg)
+  # )
+  ),]
+markers_novo = markers_novo[order(markers_novo$avg_logFC, decreasing = T),]
 cl_markers1 = markers_novo
 cl_markers1 = cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasing = T),]
 
@@ -132,11 +166,11 @@ cl_markers1 = cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasin
 # for(i in unique(cl_markers1$cluster))
 # {
 #   shreh = 0.9
-#   mark_p = 
+#   mark_p =
 #     #intersect(
 #     sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC > (shreh)) & (cl_markers1$cluster==i))])
 #     #,markers)
-#   mark_n = 
+#   mark_n =
 #     #intersect(
 #       sort(rownames(cl_markers1)[which((cl_markers1$avg_logFC < (-shreh)) & (cl_markers1$cluster==i))])
 #      # ,markers)
@@ -148,31 +182,27 @@ cl_markers1 = cl_markers1[order(sapply(cl_markers1[,"avg_logFC"],abs), decreasin
 #     }
 # }
 
-
-cl_markers_our = na.omit(cl_markers1[cl_markers1$gene %in% markers,])
+cl_markers_our = na.omit(cl_markers1[cl_markers1$gene %in% markers_of_interest,])
 cl_markers_our = cl_markers_our[order(sapply(cl_markers_our[,"avg_logFC"],abs), decreasing = T),]
 cl_markers_our = cl_markers_our[order(cl_markers_our[,"gene"], decreasing = F),]
 
 cl_markers_our
 
-sort(unique(cl_markers1[cl_markers1$cluster%in%c("s1", "s2") & cl_markers1$pct.1>0.9 & cl_markers1$pct.2>0.9,]$gene))
+genes_leveled = names(table(cl_markers1$gene)[which(table(cl_markers1$gene)==2)])
 
+genes_leveled
 
-unique(cl_markers1[cl_markers1$cluster%in%c("s1") & cl_markers1$pct.1==1 & cl_markers1$pct.2==1 & cl_markers1$avg_logFC<0,]$gene)
+cl_markers_strong = cl_markers1[which(cl_markers1$gene %in% genes_leveled),]
+cl_markers_strong = cl_markers_strong[order(sapply(cl_markers_strong[,"avg_logFC"],abs), decreasing = T),]
+#cl_markers_strong = cl_markers_strong[order(cl_markers_strong[,"gene"], decreasing = F),]
+
+cl_markers_strong
+# sort(unique(cl_markers1[cl_markers1$cluster%in%c("s1", "s2") & cl_markers1$pct.1>0.9 & cl_markers1$pct.2>0.9,]$gene))
+# 
+# 
+# unique(cl_markers1[cl_markers1$cluster%in%c("s1") & cl_markers1$pct.1==1 & cl_markers1$pct.2==1 & cl_markers1$avg_logFC<0,]$gene)
 ```
 
-
-```{r}
-curr = merged_seur1
-
-table(get_ident(curr), get_orig_ident(curr))
-plot_seur(curr)
-plot_seur(curr, method =  "pca")
-
-plot_seur_3d(curr, radius = 0.3)
-
-
-```
 
 
 ```{r}

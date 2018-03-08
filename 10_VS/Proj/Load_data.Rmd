@@ -57,8 +57,8 @@ clust_3 = c( "Pou5f1"
                      ,"gata4"
 )
 
-markers = c(clust_3,clust_2,clust_1)
-names(markers) = markers
+markers_of_interest = c(clust_3,clust_2,clust_1)
+names(markers_of_interest) = markers_of_interest
 ```
 
 ```{r}
@@ -101,92 +101,40 @@ load_sce = function(sce)
   return(curr_assay)
 }
  
-#curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\expressionTableDedupQC.csv"))
-#curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\", counts_mtx  =  curr_assay)
-
-# curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\cancer\\GSE6099_series_matrix.txt", row.names = 1, sep = "\t"))
-# curr_assay[is.null(curr_assay)] = 0
-# curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\", counts_mtx  =  curr_assay)
+# curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\expressionTableDedupQC.csv"))
+# curr_proc0 = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\NanoString\\", counts_mtx = curr_assay, 
+#                             spike.genes = c("Kanamycin Pos", "rpl13", rownames(curr_assay)[grepl("^POS", rownames(curr_assay))],rownames(curr_assay)[grepl("NEG", rownames(curr_assay))]))
  
-# # curr_assay = rel2abs(as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.tpm.txt")))
-# # curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay)
-# # 
-# # curr_assay = as.data.frame(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\SC3\\patient1-raw.txt", header = TRUE, sep  =  "\t"))
-# # 
-# # 
-# # curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay)
+curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.tpm.txt"))
+curr_proc1 = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay)
 
-# old = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\old.rds")
-# new = readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\new.rds")
-# 
-# 
-# old = load_sce(old)
-# new = load_sce(new)
-# 
-# curr_assay = m_bind(old, new, lA = "old", lB = "new")
-# 
-# curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\Svet\\", counts_mtx = curr_assay)
+# curr_assay = as.data.frame(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\SC3\\patient1-raw.txt", header = TRUE, sep  =  "\t"))
+#
+#
+# curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay)
 
-curr_assay = as.matrix(read.table("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\idc.counts.txt"))
-curr_proc = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\", counts_mtx  =  curr_assay)
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\biase.rds"))
-curr_proc0 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/biase/", counts_mtx  =  curr_assay)
+curr_proc2 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/biase/", counts_mtx  =  curr_assay)
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\deng-reads.rds"))
-curr_proc1 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/deng-reads/", counts_mtx  =  curr_assay)
+curr_proc3 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/deng-reads/", counts_mtx  =  curr_assay)
 
 
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\fan.rds"))
-curr_proc2 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/fan/", counts_mtx  =  curr_assay)
+curr_proc4 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/fan/", counts_mtx  =  curr_assay)
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\goolam.rds"))
-curr_proc3 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/goolam/", counts_mtx  =  curr_assay)
+curr_proc5 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/goolam/", counts_mtx  =  curr_assay)
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\klein.rds"))
-curr_proc4 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/klein/", counts_mtx  =  curr_assay)
+curr_proc6 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/klein/", counts_mtx  =  curr_assay)
 
 curr_assay = load_sce(readRDS(file  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\outer\\kolodziejczyk.rds"))
-curr_proc5 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/kolodziejczyk/", counts_mtx  =  curr_assay)
+curr_proc7 = full_preprocess(working_path  =  "F:/bioinf/Sk/SingleCellRNASeq/outer/kolodziejczyk/", counts_mtx  =  curr_assay)
 
-# dat <- readRDS(url("http://pklab.med.harvard.edu/velocyto/mouseBM/cell.counts.matrices.rds"))
-# emat = full_preprocess(counts_mtx = dat$exon)
+# curr_assay <- readRDS(url("http://pklab.med.harvard.edu/velocyto/mouseBM/cell.counts.matrices.rds"))$exon
+# curr_proc8 = full_preprocess(counts_mtx = curr_assay)
 ```
 
-
-```{r}
-# exprs_list = c("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784310\\cell.counts.matrices.rds",
-#                "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784313\\cell.counts.matrices.rds",
-#                "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784314\\cell.counts.matrices.rds",
-#                "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784315\\cell.counts.matrices.rds")
-# 
-# 
-# d0 = load_velocity_mtx("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784310\\cell.counts.matrices.rds")
-# d2 = load_velocity_mtx("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784313\\cell.counts.matrices.rds")
-# d4 = load_velocity_mtx("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784314\\cell.counts.matrices.rds")
-# d7 = load_velocity_mtx("F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine\\SRR1784315\\cell.counts.matrices.rds")
-# 
-# 
-# genes_all = unique(c(rownames(d0), rownames(d2), rownames(d4), rownames(d7)))
-# 
-# genes_zero_d0 = setdiff(genes_all, rownames(d0))
-# genes_zero_d2 = setdiff(genes_all, rownames(d2))
-# genes_zero_d4 = setdiff(genes_all, rownames(d4))
-# genes_zero_d7 = setdiff(genes_all, rownames(d7))
-# 
-# d0 = add_zero_genes(d0, genes_zero_d0)
-# colnames(d0) = sapply(1:ncol(d0), function(x) {return(paste0("d0.", x))})
-# d2 = add_zero_genes(d2, genes_zero_d2)
-# colnames(d2) = sapply(1:ncol(d2), function(x) {return(paste0("d2.", x))})
-# d4 = add_zero_genes(d4, genes_zero_d4)
-# colnames(d4) = sapply(1:ncol(d4), function(x) {return(paste0("d4.", x))})
-# d7 = add_zero_genes(d7, genes_zero_d7)
-# colnames(d7) = sapply(1:ncol(d7), function(x) {return(paste0("d7.", x))})
-# 
-# d = cbind(d0[order(rownames(d0)),], d2[order(rownames(d2)),], d4[order(rownames(d4)),], d7[order(rownames(d7)),])
-# 
-# final_exprs = full_preprocess(working_path  =  "F:\\bioinf\\Sk\\SingleCellRNASeq\\reads\\klein\\mine", counts_mtx  =  d)
-
-
-```
