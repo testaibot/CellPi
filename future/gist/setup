@@ -1,0 +1,256 @@
+#!/bin/bash
+
+gen_to_load=$1
+
+if [ -z "$gen_to_load" ]; then 
+	echo error: Specify genomes to load as first argument
+	echo h - human
+	echo m - mouse
+	echo example: ./setup hm
+	exit 1
+fi
+
+mkdir /home/SingleCellRNASeq
+mkdir /home/SingleCellRNASeq/Align
+cd /home/SingleCellRNASeq/Align
+apt update
+apt install -y nano wget git make cmake g++ zlib1g-dev libboost-all-dev libbamtools-dev r-base r-base-dev
+
+# Get STAR source using git
+git clone https://github.com/alexdobin/STAR.git
+cd /home/SingleCellRNASeq/Align/STAR/source
+
+# Build STAR
+make -j20 STAR
+cd /home/SingleCellRNASeq
+mkdir /home/SingleCellRNASeq/Load
+cd /home/SingleCellRNASeq/Load
+
+
+#https://www.ncbi.nlm.nih.gov/sra/docs/toolkitsoft/
+wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz
+tar -xzf sratoolkit.current-ubuntu64.tar.gz
+rm sratoolkit.current-ubuntu64.tar.gz
+
+
+
+#Set vdb-config -i without GUI
+mkdir /root/.ncbi
+cat > /root/.ncbi/user-settings.mkfg <<EOL
+/repository/remote/main/CGI/resolver-cgi = "https://www.ncbi.nlm.nih.gov/Traces/names/names.cgi"
+/repository/remote/protected/CGI/resolver-cgi = "https://www.ncbi.nlm.nih.gov/Traces/names/names.cgi"
+/repository/user/default-path = "/home/SingleCellRNASeq/Load/tmp"
+/repository/user/main/public/apps/file/volumes/flat = "files"
+/repository/user/main/public/apps/nakmer/volumes/nakmerFlat = "nannot"
+/repository/user/main/public/apps/nannot/volumes/nannotFlat = "nannot"
+/repository/user/main/public/apps/refseq/volumes/refseq = "refseq"
+/repository/user/main/public/apps/sra/volumes/sraFlat = "sra"
+/repository/user/main/public/apps/wgs/volumes/wgsFlat = "wgs"
+/repository/user/main/public/cache-enabled = "true"
+/repository/user/main/public/root = "/home/SingleCellRNASeq/Load/tmp/public"
+/tools/ascp/max_rate = "1000m"
+EOL
+
+
+
+#Install barcode correction pipeline dropEst
+cd /home/SingleCellRNASeq
+git clone https://github.com/hms-dbmi/dropEst.git
+cd /home/SingleCellRNASeq/dropEst
+
+echo 'install.packages(c("Rcpp","RcppEigen", "RInside", "Matrix"), repos=c("http://cloud.r-project.org","http://cran.us.r-project.org"))'> RInstall.R
+Rscript RInstall.R
+rm RInstall.R
+rm -rf /tmp/*
+
+cmake . && make -j20
+
+#Save environment $PATH for future use
+echo 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/home/SingleCellRNASeq/Align/STAR/bin/Linux_x86_64:/home/SingleCellRNASeq/Load/sratoolkit.2.8.2-1-ubuntu64/bin:/home/SingleCellRNASeq/dropEst"' > /home/SingleCellRNASeq/env_var
+
+source /home/SingleCellRNASeq/env_var
+
+#Load refGenome and annotation https://www.gencodegenes.org
+cd /home/SingleCellRNASeq/Align
+
+mouse_gen_folder_name=mm10
+mouse_gen_annot_name=gencode.vM15.chr_patch_hapl_scaff.annotation.gtf
+if [[ "$gen_to_load" == *"m"* ]]; then
+
+	#load mouse	
+	wget ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_mouse/release_M15/GRCm38.primary_assembly.genome.fa.gz
+	gunzip GRCm38.primary_assembly.genome.fa.gz
+	
+	wget ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_mouse/release_M15/$mouse_gen_annot_name.gz
+	gunzip $mouse_gen_annot_name.gz
+	
+	#Generate genome index
+	mkdir /home/SingleCellRNASeq/Align/$mouse_gen_folder_name
+	STAR --runThreadN 20 --runMode genomeGenerate --genomeDir ./$mouse_gen_folder_name --genomeFastaFiles GRCm38.primary_assembly.genome.fa --sjdbGTFfile $mouse_gen_annot_name
+
+fi
+
+human_gen_folder_name=hg19
+human_gen_annot_name=gencode.v27.chr_patch_hapl_scaff.annotation.gtf
+if [[ "$gen_to_load" == *"h"* ]]; then
+	#load human	
+	wget ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_27/$human_gen_annot_name.gz
+	gunzip $human_gen_annot_name.gz
+	
+	wget ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_27/GRCh38.primary_assembly.genome.fa.gz
+	gunzip GRCh38.primary_assembly.genome.fa.gz
+	
+	#Generate genome index
+	mkdir /home/SingleCellRNASeq/Align/$human_gen_folder_name
+	STAR --runThreadN 20 --runMode genomeGenerate --genomeDir ./$human_gen_folder_name --genomeFastaFiles GRCh38.primary_assembly.genome.fa --sjdbGTFfile $human_gen_annot_name
+	
+fi
+
+mkdir /home/SingleCellRNASeq/reads
+
+#write processing scripts
+cat > /home/calculate <<'EOF'
+#!/bin/bash
+
+#config_dropest=/home/SingleCellRNASeq/dropEst/configs/indrop_v1_2.xml
+gen_type=$1
+srr_id=$2
+cell_count=$3
+config_dropest=$4
+clean_type=$5
+
+#load environment $PATH from file, saved of setup step
+source /home/SingleCellRNASeq/env_var
+
+reads_path=/home/SingleCellRNASeq/reads
+sra_path=/home/SingleCellRNASeq/Load/tmp/public/sra
+gen_and_annot_path=/home/SingleCellRNASeq/Align
+
+
+annotM=annotM_S
+annotH=annotH_S
+gen_dirM=gen_dirM_S
+gen_dirH=gen_dirH_S
+
+
+
+if [ "$gen_type" != "m" ] && [ "$gen_type" != "h" ]; then 
+	echo error: Unknown genome type
+	exit 1
+fi
+
+if [ ! -f "$config_dropest" ];then
+	echo error: File config_dropest with dropest config does not exist
+	exit 1
+fi
+
+if [ -z "$srr_id" ]; then
+	echo error: SRR name is empty
+ 	exit 1
+fi
+
+if [ -z "$cell_count" ]; then
+	echo error: Give cell count as second parameter
+	exit 1
+fi
+
+
+
+if [ "$gen_type" == "m" ]; then
+	curr_annot=$annotM
+	curr_gen_dir=$gen_dirM
+fi
+
+if [ "$gen_type" == "h" ]; then
+	curr_annot=$annotH
+	curr_gen_dir=$gen_dirH
+fi
+
+#Every 'if' statement below checks whether the step has already been performed
+#If so, skip to the first step where files are not generated yet
+#If any error occured, manually delete files from the latest step and re-run script
+
+if [ ! -f $sra_path/"$srr_id".sra ]; then
+	echo File  $sra_path/"$srr_id".sra not found!
+	echo Prefetching $srr_id
+	prefetch "$srr_id"
+fi
+
+
+if [ ! -d "$reads_path" ]; then
+	mkdir $reads_path
+fi
+
+if [ ! -f $reads_path/$srr_id/$srr_id* ]; then
+	echo Splitting "$srr_id".sra into separate reads
+	fastq-dump --split-3 --gzip $sra_path/"$srr_id".sra -O $reads_path/"$srr_id"
+fi
+
+
+if [ ! -f $reads_path/$srr_id/"$srr_id"_2.fastq.gz.tagged.1.fastq.gz  ]; then	
+	droptag -p 20 -n $reads_path/"$srr_id"/"$srr_id"_2.fastq.gz.tagged -c $config_dropest $reads_path/"$srr_id"/"$srr_id"_1.fastq.gz $reads_path/"$srr_id"/"$srr_id"_2.fastq.gz
+fi
+
+
+if [ ! -f $reads_path/$srr_id/align/Aligned.sortedByCoord.out.bam ]; then
+	rm -rf $reads_path/$srr_id/align && mkdir $reads_path/$srr_id/align && ls $reads_path/$srr_id/ | grep 'tagged' |  while read line ; do echo "$reads_path/$srr_id/$line," ; done | xargs STAR --runThreadN 20 --genomeDir $gen_and_annot_path/$curr_gen_dir --readFilesCommand gunzip -c  --outFileNamePrefix $reads_path/$srr_id/align/ --outFilterMultimapNmax 1 --sjdbGTFfile $gen_and_annot_path/$curr_annot --outSAMtype BAM SortedByCoordinate --readFilesIn
+fi
+
+
+if [ ! -f $reads_path/$srr_id/cell.counts.matrices.rds ]; then
+	dropest -M -g $gen_and_annot_path/$curr_annot -c $config_dropest -C $cell_count -V $reads_path/$srr_id/align/Aligned.sortedByCoord.out.bam -o $reads_path/"$srr_id"/cell.counts.matrices.rds
+fi
+
+
+if [  "$clean_type" == clean ]; then
+	if [ ! -f $reads_path/$srr_id/cell.counts.matrices.rds]; then
+		echo Final result is missing, cant perform ''clean'', use ''clean_all'' instead
+		exit 1
+	fi
+	bash /home/clean $srr_id
+fi
+
+if [  "$clean_type" == clean_all ]; then
+	bash /home/clean $srr_id
+fi
+
+
+
+EOF
+
+sed -i "s/annotM_S/$mouse_gen_annot_name/g" /home/calculate
+sed -i "s/annotH_S/$human_gen_annot_name/g" /home/calculate
+sed -i "s/gen_dirM_S/$mouse_gen_folder_name/g" /home/calculate
+sed -i "s/gen_dirH_S/$human_gen_folder_name/g" /home/calculate
+
+cat > /home/clean <<'EOF'
+#!/bin/bash
+
+srr_id=$1
+
+if [ -z "$srr_id" ]; then
+	echo "error: SRR name is empty"
+ 	exit 1
+fi
+
+if [ -f /home/SingleCellRNASeq/Load/tmp/public/sra/"$srr_id".sra ]; then
+	rm /home/SingleCellRNASeq/Load/tmp/public/sra/"$srr_id".sra
+fi
+
+if [ -d /home/SingleCellRNASeq/reads/"$srr_id"/align ]; then
+	rm -rf /home/SingleCellRNASeq/reads/"$srr_id"/align
+fi
+
+if [ -d /home/SingleCellRNASeq/reads/"$srr_id" ]; then
+	rm /home/SingleCellRNASeq/reads/"$srr_id"/"$srr_id"*
+	rm /home/SingleCellRNASeq/reads/"$srr_id"/core.*
+fi
+
+EOF
+
+
+chmod +x /home/calculate
+chmod +x /home/clean
+
+echo " "
+echo "All done, ready to start reads preprocessing"

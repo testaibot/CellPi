@@ -1,0 +1,752 @@
+```{r}
+#update packages
+#update.packages(checkBuilt = TRUE, ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+
+#remove all mran
+# ip <- as.data.frame(installed.packages())
+# head(ip)
+# ip <- subset(ip, !grepl("MRO", ip$LibPath))
+# ip <- ip[!(ip[,"Priority"] %in% c("base", "recommended")),]
+# path.lib <- unique(ip$LibPath)
+# pkgs.to.remove <- ip[,1]
+# head(pkgs.to.remove)
+# sapply(pkgs.to.remove, remove.packages, lib = path.lib)
+
+
+#fix mran first start xfun and rmarkdown
+# devtools::install_github('yihui/xfun' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('r-lib/cachem' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# install.packages("https://cran.r-project.org/src/contrib/Archive/rlang/rlang_0.4.10.tar.gz", repos = NULL, type="source", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('r-lib/fastmap' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('rstudio/htmltools' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('rstudio/sass' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('rstudio/jquerylib' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('rstudio/bslib' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+# devtools::install_github('rstudio/rmarkdown' , ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+
+```
+
+```{r}
+#helper functions, just run this chunk and scroll to the next one
+
+if(!require("devtools"))
+{
+  install.packages("devtools", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  require("devtools")
+}
+
+if(!require("future"))
+{
+  install.packages("future", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  require("future")
+}
+
+# plan("multiprocess", workers = 4)
+options(future.globals.maxSize = 300*1000 * 1024^2)
+
+#memory.limit(300*1000 * 1024^2)
+
+
+
+
+if(!require("Seurat"))
+{
+  devtools::install_github("cran/multtest", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/Matrix", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/deldir", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/Rcpp", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/RcppAnnoy", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/scattermore", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/sctransform", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("cran/uwot", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  
+
+  devtools::install_github("spatstat/spatstat.core", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("spatstat/spatstat.geom", ref = "main", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  
+  devtools::install_github("mojaveazure/seurat-object", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("satijalab/seurat-data")
+  
+  devtools::install_github("mojaveazure/seurat-disk")
+  devtools::install_github("satijalab/seurat", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  
+  devtools::install_github("RGLab/MAST", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  
+  require(Seurat)
+}
+
+if(!require(pastecs)){
+  install.packages("pastecs")
+  require(pastecs)
+}
+
+if(!require(sparseMatrixStats)){
+  devtools::install_github("HenrikBengtsson/matrixStats", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("Bioconductor/MatrixGenerics", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  devtools::install_github("const-ae/sparseMatrixStats", ref = "master", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  require(sparseMatrixStats)
+}
+require(Matrix)
+
+if(!require(doSNOW)){
+  install.packages("doParallel", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  install.packages("doSNOW", ask = FALSE, INSTALL_opts = c('--no-lock'), force = T)
+  require(doSNOW)
+}
+
+
+types2names = function(types)
+{
+  dict = rep(1, length(unique(types)))
+  names(dict) = unique(types)
+  
+  cell_names = NULL
+  for (type in types)
+  {
+    cell_names = c(cell_names, paste0(type, ".", dict[type]))
+    dict[type] = dict[type] + 1
+  }
+  return(cell_names)
+}
+
+
+filter_na_inf = function(mtx)
+{
+  colsS = log1p(Matrix::colSums(mtx))
+  rowsS = log1p(Matrix::rowSums(mtx))
+  
+  goodCols = !is.infinite(colsS)&!is.na(colsS)&(colsS>0)
+  goodRows = !is.infinite(rowsS)&!is.na(rowsS)&(rowsS>0)
+  
+  percC = (table(goodCols)/ncol(mtx))["TRUE"]
+  percR = (table(goodRows)/nrow(mtx))["TRUE"]
+  
+  if(is.na(percR))
+  {
+    mtx = mtx[,goodCols]
+  }else if(is.na(percC))
+  {
+    mtx = mtx[goodRows,]
+  }else if(percC>percR)
+  {
+    mtx = mtx[,goodCols]
+  }else{
+    mtx = mtx[goodRows,]
+  }
+
+  
+  return(mtx)
+}
+
+
+set_names = function(mtx)
+{
+  if(is.null(colnames(mtx)))
+  {
+    colnames(mtx) = 1:ncol(mtx)
+  }
+  
+  if(is.null(rownames(mtx)))
+  {
+    rownames(mtx) = 1:nrow(mtx)
+  }
+  
+  mtx = mtx[rownames(mtx) %in% names(which(table(rownames(mtx))==1)),]
+  
+  return(mtx)
+}
+
+
+filter_mtx = function(mtx, th = 1)
+{
+  mtx = as(mtx, "dgCMatrix")
+  mtx[mtx<0]=0
+  mtx = filter_na_inf(mtx)
+  
+  mtx = set_names(mtx)
+
+  mtx_low = mtx
+  mtx_low@x[mtx_low@x>min(mtx_low@x)] = 1
+  
+  genes_freq = sort(Matrix::rowSums(mtx_low), decreasing = T)
+  cells_freq = sort(Matrix::colSums(mtx_low), decreasing = T)
+  mtx = mtx[names(which(genes_freq>th)),names(which(cells_freq>th))]
+
+  return(mtx)
+}
+
+
+seur_create = function(mtx)
+{
+  object = CreateSeuratObject(counts = mtx, names.delim = "no_delimiters_plz!")
+  object[["orig.ident"]] = get_types(colnames(mtx))
+  object[["curr.ident"]] = object@active.ident
+  #levels(object) = ""
+  return(object)
+}
+
+
+compute_pca = function(object, features = NULL)
+{
+  print("Compute pca...")
+  object@reductions$pca = NULL
+  
+  pc_seq = c(100,90,80,70,65,60,55,50,45,40,35,30,25, 
+    20, 17, 15, 12, 10, 7, 5, 4, 3, 2)
+  if(is.null(features))
+  {
+    features = rownames(object)
+  }
+  
+  for(pc_use in pc_seq[pc_seq<min(ncol(object), nrow(object))])
+  {
+    object1 = tryCatch(RunPCA(object = object, features = features, 
+                              npcs = pc_use, rev.pca = F, 
+                              weight.by.var = T, verbose = F, 
+                              approx = T,
+                              maxit = 2147483647),
+                              error = function(e) {
+                                print(e)
+                                NULL}, 
+                      warning = function(w) {
+                        print(w)
+                        NULL}
+                      )
+    
+    if(!is.null(object1))
+    {
+      object = object1
+      rm(object1)
+      break
+    }
+  }
+  
+
+  print("Done")
+  return(object)
+}
+
+
+get_types = function(arr, sep = ".")    
+{
+  return(factor(sapply(arr, function(cell) { return(unlist(strsplit(cell, sep, fixed = T))[1])})))
+}
+
+
+compute_clustering_k_means_rez_new = function(object, reduction = "tsne", k_param = NULL, cl_min = NULL, rez_step = 0.01)
+{
+  gran_shresh = 2
+  k.param = 3
+  
+  if(is.null(cl_min))
+  {
+    cl_min = sapply(1:ncol(Embeddings(object, reduction)),
+     FUN = function(i){length(which(turnpoints(density(Embeddings(object, reduction)[,i], bw = "SJ")$y)$peaks))}
+    )
+    cl_min = max(cl_min)
+  }
+  
+  if(is.null(k_param))
+  {
+    k.param = min(50,max(3, round(ncol(object)/cl_min)))
+  }
+
+  object = FindNeighbors(object = object, reduction = reduction,
+                         dims = 1:ncol(Embeddings(object, reduction)),
+                         prune.SNN = 0.1,
+                         k.param = k.param)
+  
+  object = suppressWarnings(FindClusters(object = object,
+                                         resolution = 0,
+                                         verbose = F,
+                                         n.start = 1,
+                                         n.iter = 1
+                                        )
+                            )
+  
+  object[["curr.ident"]] = object@active.ident
+    
+  if(rez_step==0)
+  {
+    return(object)
+  }
+  
+  steps = seq(rez_step, 20, rez_step)
+  for(rez in steps)
+  {
+    object = suppressWarnings(FindClusters(object = object, 
+                                             resolution = rez, 
+                                             verbose = F,
+                                             n.start = 1,
+                                             n.iter = 1))
+      
+    clusters = table(object@active.ident)
+    
+    if(length(clusters) >= cl_min){
+      object[["curr.ident"]] = object@active.ident
+      return(object)
+    }
+  }
+  return(NULL)
+}
+
+compute_clustering_hc = function(object, reduction)
+{
+  o_list = c()
+  object[["curr.ident"]] = rep(1, ncol(object))
+  
+  cl_min = sapply(1:ncol(Embeddings(object, reduction)),
+     FUN = function(i){length(which(turnpoints(density(Embeddings(object, reduction)[,i], bw = "SJ")$y)$peaks))}
+    )
+  target_cln = max(cl_min)
+  
+  for (minPts in 2:1000)
+  {
+    hdb = dbscan::optics(Embeddings(object, reduction), minPts = minPts)
+    #hdb = dbscan::hdbscan(Embeddings(object, reduction), minPts = minPts)
+
+    hdb = dbscan::extractDBSCAN(hdb, max(hdb$reachdist[hdb$reachdist<Inf]))$cluster
+    #hdb = dbscan::extractFOSC(hdb$hc, prune_unstable = F)$cluster
+
+    names(hdb) = colnames(Embeddings(object, reduction))
+    #hdb = hdb[names(object$orig.ident)]
+    hd = factor(hdb)
+    outliers = length(which(hdb==0))
+
+    cl_curr = length(levels(hd))
+    if(cl_curr <= 1){
+      break
+    }
+    
+    if(outliers==0){
+      object[["curr.ident"]] = hdb
+      break
+    }
+
+  }
+  object@active.ident = get_ident(object)
+  
+  return(object)
+}
+
+compute_dimred = function(object, perplexity, dims.use = NULL, dim.embed = 2, reduction_in = "pca", reduction_out = "tsne", ...)
+{
+  round_of_tsne = function(object, dim.embed, perplex, dims.use, reduction_in, theta = 0.1, ...)
+  {
+    perplex = min(perplex,max(2,ceiling(ncol(object)/3)-1))
+    if(ncol(object)>0)
+    {
+      object = tryCatch(RunTSNE(object = object,
+                              tsne.method = "FIt-SNE",
+                              fast_tsne_path = "D:/Program Files/FltSNE/FItSNE.exe",
+                              nthreads = 8,
+                              dims = dims.use,
+                              dim.embed = dim.embed,
+                              reduction = reduction_in,
+                              check_duplicates = FALSE, 
+                              perplexity = perplex, 
+                              nbody_algo = "FFT",
+                              theta = theta,
+                              seed.use = as.numeric(Sys.time()), ...
+    ), error = function(e) {print(e)
+      return(object)})
+    }
+    
+    if(!("tsne" %in% names(object@reductions)))
+    {
+      object = tryCatch(RunTSNE(object = object,
+                              #tsne.method = "FIt-SNE",
+                              #fast_tsne_path = "FltSNE/FItSNE.exe",
+                              nthreads = 8,
+                              dims = dims.use,
+                              dim.embed = dim.embed,
+                              reduction = reduction_in,
+                              check_duplicates = FALSE, 
+                              perplexity = perplex, 
+                              theta = theta, 
+                              seed.use = as.numeric(Sys.time()), ...
+    ), error = function(e) {print(e)
+      return(object)})
+    }
+    
+    
+    return(object)
+  }
+  
+  round_of_umap = function(object, dim.embed, perplex, dims.use, reduction_in, ...)
+  {
+    object = tryCatch(RunUMAP(object, 
+                              reduction = reduction_in,
+                              n.neighbors = perplex,
+                              dims = dims.use,
+                              n.components = dim.embed, 
+                              metric = "correlation", 
+                              n.epochs = NULL,
+                              learning.rate = eta, 
+                              min.dist = 0.3, 
+                              spread = 1,
+                              set.op.mix.ratio = 1, 
+                              local.connectivity = 1L,
+                              repulsion.strength = 1, 
+                              negative.sample.rate = 5, 
+                              a = NULL,
+                              b = NULL, 
+                              seed.use = 42,#as.numeric(Sys.time()) 
+                              metric.kwds = NULL,
+                              angular.rp.forest = FALSE, 
+                              reduction.key = "UMAP_", 
+                              verbose = TRUE,...
+        ), error = function(e) {print(e)
+      return(object)})
+    
+    return(object)
+  }
+  
+  if(is.null(dims.use))
+  {
+    dims.use = 1:ncol(Embeddings(object, reduction_in))
+  }
+  
+  if(is.null(perplexity))
+  {
+    object = object
+  }else{
+    if(reduction_out == "tsne")
+    {
+      object@reductions[["tsne"]]=NULL
+      #cat("Computing tsne: ", perplexity, "\n")
+      object = round_of_tsne(object, dim.embed = dim.embed, perplex = perplexity, reduction_in = reduction_in, dims.use = dims.use, ...)
+    }else if(reduction_out == "umap"){
+      #cat("Computing umap: ", perplexity, "\n")
+      object = round_of_umap(object, dim.embed = dim.embed, perplex = perplexity, reduction_in = reduction_in, dims.use = dims.use, ...)
+    }
+  }
+  
+  return(object)
+}
+
+```
+
+```{r}
+to_ranks = function(x, decreasing = F)
+{
+  xn = match(x, sort(unique(x),decreasing = decreasing))
+  names(xn) = names(x)
+  return(xn)
+}
+
+to_pcranks = function(x, decreasing = F)
+{
+  xn = to_ranks(x)
+  xn = xn-min(xn)
+  xn = xn/length(unique(xn))
+  xn = xn/max(xn)
+  return(xn)
+}
+
+#pease do not modify this code, unless you are 100% sure about it, and all of the boundary-cases
+generate_projection_matrix = function(nc,eps){
+  
+  s = max(3,ceiling(sqrt(nc)))
+  k = ceiling(eps**(-2) * log(nc))
+  
+  
+  #3
+  prob = (1/(2*s))
+  gd = ceiling(prob*nc)*2
+  r_coeff = 1#sqrt(s)
+
+  trandom_seed = as.numeric(Sys.time())
+   gi = sapply(1:k, function(x){
+      set.seed(x+trandom_seed)
+      val = sample(nc,gd)
+      ord = order(val, decreasing = F)
+      sgn = rep(1,gd)
+      sgn[1:(gd/2)]= -1
+      val = (sgn*val)[ord]
+      
+      return(list(val))
+   })
+  
+   mat = as(Matrix(0, nc, length(gi), sparse = TRUE),"dgCMatrix")
+   mat@p = as.integer(cumsum(c(0,sapply(gi,length))))
+   mat@i = as.integer(abs(unlist(gi))-1)
+   mat@x = as.numeric(sign(unlist(gi))*r_coeff)
+   
+   mat = mat/sqrt(rowSums(abs(mat)))
+   return(mat)
+  
+}
+
+#feature selection
+#computes dataset random projection matrix
+#pease do not modify this code, unless you are 100% sure about it, and all of the boundary-cases
+get_random_projection = function(m, eps = 0.05, ret_pr = F){
+ 
+  #normalized dataset matrix
+  m_td = as(m,"dgCMatrix")
+  
+  m_td = m_td/(norm(m_td)/nrow(m_td))
+  # m_td = m_td-Matrix::rowMeans(m_td)
+  
+  nc = ncol(m_td)
+  system.time({mat = generate_projection_matrix(nc,eps = eps)})
+  
+  
+  system.time({m_model = m_td%*%mat})
+  #filter low-qual to zero
+  m_model = m_model[which(Matrix::rowSums(abs(m_model))>0),]
+  
+  #remove mesh/grid rounding error 
+  #(this is not the same as fp8-16 rounding error, more about the RP-approximation error. 
+  # You'll break the computation symmetry if you remove this. 
+  # Please, double-check you realize what you are doing, or leave this code be "as is")
+  thr_dens = density(m_model@x[m_model@x>0])
+  grad2 = smooth.spline(diff(diff(thr_dens$y)),spar = 0)$y
+  thr_pits = which(turnpoints(grad2)$pits)[1]
+  thr_zero = thr_dens$x[2*thr_pits]
+  m_model[abs(m_model)<thr_zero] = 0
+  
+  #round to grid/hashing
+  m_model = sign(m_model)
+
+  colnames(m_model) = 1:ncol(m_model)
+  
+  #now we have random projection matrix that further used in get_cosine_pca_model
+  if(!ret_pr){return(m_model)}
+  else{return(list(m_model = m_model,mat = mat))}
+  
+}
+
+#computes cosine similarity on random projection matrix
+get_cosine_pca_model = function(m_model, ...){
+  #calculate gene-gene similarity based on falues on RCs for each gene
+  cosine_sim = coop::tcosine(as.matrix(m_model), ...)
+  
+  #set diagonal to zero, to penaltize self-connection and search for strong connections off-main diagonal
+  diag(cosine_sim) <- 0
+  
+  return(cosine_sim)
+}
+
+get_extr = function(x, pits = T){
+  dens = density(x)
+  ddens = smooth.spline(diff(smooth.spline(diff(smooth.spline(diff(smooth.spline(dens$y,spar = 1)$y),spar = 0)$y),spar = 0)$y),spar = 0)$y
+
+  turns = suppressWarnings(turnpoints(ddens))
+  if(pits)
+  {
+    extr = which(turns$pits)
+    }
+  else{
+    extr = which(turns$peaks)
+    }
+  
+  return(dens$x[extr])
+} 
+
+
+#uses similarity matrix to find co-localizations for each genes
+#for each gene select k most highly positively and negatively connected genes
+compute_localized_genes = function(sim, k = 5){
+  sim = apply(sim,2,function(x){
+    
+    #searching positive similarity
+    pos_x = x[x>0]
+    pos_x = pos_x[pos_x>quantile(pos_x,1-c(k)/length(pos_x))]
+    if(length(pos_x)<k|sum(pos_x>0.99999)>1){return(NULL)}
+    pos_x = sort(pos_x,T)[1:length(pos_x)]
+    
+    #searching negative similarity
+    neg_x = -x[x<0]
+    neg_x = neg_x[neg_x>quantile(neg_x,1-c(k)/length(neg_x))]
+    if(length(neg_x)<k|sum(neg_x>0.99999)>1){return(NULL)}
+    neg_x = sort(neg_x,T)[1:length(neg_x)]
+    
+    #select several randomly connected genes
+    #neu_x = abs(x)
+    #neu_x = neu_x[neu_x<quantile(neu_x,c(k)/length(neu_x))]
+    #neu_x = sort(neu_x,F)[2:length(neu_x)]
+    
+    
+    return(list(pos = pos_x,neg = neg_x))#, neu = neu_x))
+  })
+  sim = sim[!sapply(sim,is.null)]
+  
+  return(sim)
+}
+
+#uses similarity matrix to find co-localizations for each genes
+filter_localized_genes = function(sim, k = 15){
+  sim = apply(sim,2,function(x){
+    
+    #searching positive similarity
+    pos_x = x[x>0]
+    pos_x = pos_x[pos_x>sd(pos_x)]
+    pos_x = quantile(pos_x,1-c(k)/length(pos_x))
+    
+    #searching negative similarity
+    neg_x = -x[x<0]
+    neg_x = neg_x[neg_x>sd(neg_x)]
+    neg_x = quantile(neg_x,1-c(k)/length(neg_x))
+
+    x[x>-neg_x&x<pos_x] = 0
+    
+    
+    return(x)#, neu = neu_x))
+  })
+  
+  return(sim)
+}
+
+
+#uses similarity matrix and co-localizations to find genes cliques through diffusion-like process
+get_low_cl = function(sim, l_m, level = 1){
+  #for each gene we select his best co-localization pair
+  p_m = sapply(l_m, function(x){names(x$pos[level])})
+  n_m = sapply(l_m, function(x){names(x$neg[level])})
+  
+  #select genes that act as hubs after diffusion (more than 3 and more genes end with this one)
+  #g1->g3 g2->g4 g3->g3 g4->g4
+  #hub frequency: g1:0, g2:0, g3:2, g4:2
+  #create and return list of hubs: g3: g1,g3, g4: g2,g4 (only return hub if contains more than min_cl_size genes)
+  ld_p = sapply(names(which(table(p_m)>1)),function(x)
+  {
+    x = sort(sim[x,names(p_m)[p_m%in%x]],decreasing = T)
+    return(x)
+  })
+  
+  ld_n = sapply(names(which(table(n_m)>1)),function(x)
+  {
+    x = sort(abs(sim[x,names(n_m)[n_m%in%x]]),decreasing = T)
+    return(x)
+  })
+  #un = intersect(names(ld_p), names(ld_n))
+  
+  return(list(pos = ld_p, neg = ld_n))
+}
+
+sort_diag = function(object)
+{
+  return(object[, order(sapply(1:ncol(object), function (x) {return(which.max(object[,x]))}))])
+}
+
+get_ident = function(object, types = NULL)
+{
+  ident = object@meta.data$curr.ident#[which(!grepl(".copy", names(object@meta.data$curr.ident))),]
+  names(ident) = rownames(object@meta.data)
+  if(!is.null(types))
+  {
+    ident = ident[which(get_types(names(ident))%in%types)]
+  }
+  return(factor(ident))
+} 
+
+get_orig_ident = function(object, types = NULL)
+{
+  ident = object@meta.data$orig.ident#[which(!grepl(".copy", names(object@meta.data$curr.ident))),]
+  names(ident) = rownames(object@meta.data)
+  if(!is.null(types))
+  {
+    ident = ident[which(get_types(names(ident))%in%types)]
+  }
+  return(factor(ident))
+} 
+
+seur_stat = function(object, types_ordering = NULL)
+{
+  if(length(unique(get_orig_ident(object)))<ncol(object))
+  {
+    if(is.null(types_ordering))
+    {
+      sort_diag(t(table(get_ident(object), get_orig_ident(object))))
+    }else{
+      sort_diag(t(table(get_ident(object), get_orig_ident(object)))[types_ordering,])
+    }
+  }else{
+    table(get_ident(object))
+  }
+  
+}
+
+```
+
+```{r}
+require(doParallel)
+require(doSNOW)
+init_par = function(cl,threads = 4){#detectCores()){
+try({
+  stopCluster(cl)
+  })
+
+cl <- makeCluster(threads, 
+                       type = "SOCK", 
+                       methods = FALSE)
+clusterEvalQ(cl = cl, {
+})
+setDefaultCluster(cl)
+registerDoParallel(cl)
+print("Done")
+# stopCluster(cl)
+return(cl)
+}
+
+cl = init_par(NULL)
+
+require(progress)
+# This function is similar to "parSapply", but doesn't preschedule
+# tasks and doesn't support "simplify" and "USE.NAMES" options
+pbSapply <- function(cl, X, FUN, ...) {
+  registerDoSNOW(cl)
+  pb <- progress_bar$new(
+  format = "  [:bar] :current/:total (:percent) eta: :eta",
+  total = length(X), clear = FALSE, force =  T)
+  progress <- function(n) pb$tick()
+  opts <- list(progress=progress)
+  foreach(i=X, .combine='c', .options.snow=opts) %dopar% {
+    FUN(i, ...)
+  }
+}
+```
+
+```{r}
+get_cliques = function(mtx, clique_size = -1, min_clique_size = 2, max_clique_size = Inf){
+  cl_list = list()
+  
+  get_cliques_single_level = function(nml = nml, clique_size = clique_size){
+    
+    knn = sapply(nml[sapply(nml,length)>=clique_size],function(x){
+      x = paste0(sort(names(sort(x,T)[1:clique_size])),collapse = "_")
+      return(x)
+    })
+    
+    knn = unlist(knn[!sapply(knn,is.null)])
+    knn_freq = sort(table(knn),T)
+    knn_freq = knn_freq[knn_freq==clique_size]
+    cliques = sapply(names(knn_freq),function(x){
+      x = strsplit(x, split = "_")[[1]]
+      return(list(x))
+    })
+    return(cliques)
+  }
+  
+  
+  if(clique_size != -1){return(get_cliques_single_level(nml, clique_size))}
+  
+  clq_curr = min_clique_size
+  cl_list = get_cliques_single_level(mtx, clq_curr)
+  cl_size = -1
+  while(cl_size!=length(cl_list) & clq_curr<=max_clique_size){
+    print(clq_curr)
+    cl_size=length(cl_list)
+    clq_curr = clq_curr+1
+    cl_list = c(cl_list,get_cliques_single_level(mtx, clq_curr))
+  }
+  
+  cl_list = cl_list[!sapply(names(cl_list),function(lvl1){
+      return(any((sapply(names(cl_list)[!names(cl_list)%in%lvl1],function(lvl2){
+          all(cl_list[[lvl1]]%in%cl_list[[lvl2]])
+      }))))
+  })]
+}
+```

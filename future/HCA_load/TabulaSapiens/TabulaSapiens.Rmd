@@ -1,0 +1,27 @@
+
+
+```{r}
+
+filename = "E:/ML_data/HCA/TabulaSapiens/TabulaSapiens.rds"
+#obj_de_t = readRDS("E:/ML_data/HCA/Quake/Quake_10x_de.rds")
+
+obj = readRDS(filename)
+obj@assays$RNA@meta.features$feature_name
+
+mtx <- obj@assays$RNA@counts
+colnames(mtx) = types2names(obj@meta.data$cell_type)
+rownames(mtx) <- obj@assays$RNA@meta.features$feature_name
+# colnames(mtx) <-types2names(as.factor(as.vector(H5Dread(H5Dopen(f, "obs/organ")))))#  obs_names
+# rownames(mtx) <- var_names
+rm(obj)
+gc()
+```
+
+
+```{r}
+obj = seur_create(mtx)
+
+rm("mtx","filename")
+gc()
+```
+

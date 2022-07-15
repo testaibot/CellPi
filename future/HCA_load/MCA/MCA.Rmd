@@ -1,0 +1,27 @@
+
+```{r}
+msa = readRDS("E:/ML_data/HCA/MCA/MCA_merged_mat.rds")
+obj_de_t = readRDS("E:/ML_data/HCA/MCA/MCA_merged_de_mat.rds")
+```
+
+```{r}
+classes = sapply(colnames(msa), function(x) strsplit(x,fixed = T, ".")[[1]][1])
+
+subset = as.character(array(sapply(names(which(table(classes)>200)), function(x){
+  sample(colnames(msa)[classes%in%x],200)
+})))
+
+msa = msa[,subset]
+
+msa = Matrix(msa, sparse = T)
+```
+
+```{r}
+obj = seur_create(msa)
+
+rm(msa)
+rm(classes)
+rm(subset)
+gc()
+```
+

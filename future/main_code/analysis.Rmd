@@ -1,0 +1,53 @@
+
+
+```{r}
+#load TFs table
+tf = read.table("D:/bioinf/SingleCellRNASeq/10_VS/Proj/Antonio/Mus_musculus_TF.txt", sep = "\t")
+```
+
+
+```{r}
+#load dataset
+#load("D:/bioinf/Sk/SingleCell/SingleCellRNASeq/10_VS/Proj/Antonio/datasets/LimbMuscle/pthw_data_Limb_1month_2019-09-17_22.19.RData")
+
+senic_tm = as.matrix(read.table("D:/bioinf/SingleCellRNASeq/10_VS/Proj/Antonio/datasets/LimbMuscle/Senis_LimbMuscle_Facs_counts&TPM/Limb_Muscle_facs_counts.txt", sep = "\t"))
+senic_tm_an = as.matrix(read.table("D:/bioinf/SingleCellRNASeq/10_VS/Proj/Antonio/datasets/LimbMuscle/Senis_LimbMuscle_Facs_counts&TPM/Limb_Muscle_facs_counts_annotation.txt", sep = "\t", header = T))
+
+
+
+```
+
+
+```{r}
+#matrix preprocessing
+mtx = Matrix(as.matrix(senic_tm),sparse = T)
+mtx = filter_mtx(mtx)
+rownames(mtx) = sapply(strsplit(rownames(mtx),"_"),function(x){x[[2]]})
+
+#load cluster annotation
+obj_cl = senic_tm_an[,2:3]
+rownames(obj_cl) = senic_tm_an[,1]
+obj_cl = obj_cl[colnames(mtx),]
+```
+
+
+```{r}
+#remove raw data
+# rm(ESCdata)
+# rm(ESCannotations)
+```
+
+
+```{r}
+#load matrix and annotation to Seurat
+obj = seur_create(mtx)
+obj@meta.data[["orig.ident"]] = factor(obj_cl[,1])
+obj@meta.data[["orig.ident1"]] = factor(obj_cl[,2])
+```
+
+
+```{r}
+rm("tf", "senic_tm", "senic_tm_an", "mtx", "obj_cl")
+```
+
+

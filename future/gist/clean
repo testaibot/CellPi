@@ -1,0 +1,21 @@
+#!/bin/bash
+
+srr_id=$1
+
+if [ -z "$srr_id" ]; then
+	echo "error: SRR name is empty"
+ 	exit 1
+fi
+
+if [ -f /home/SingleCellRNASeq/Load/tmp/public/sra/"$srr_id".sra ]; then
+	rm /home/SingleCellRNASeq/Load/tmp/public/sra/"$srr_id".sra
+fi
+
+if [ -d /home/SingleCellRNASeq/reads/"$srr_id"/align ]; then
+	rm -rf /home/SingleCellRNASeq/reads/"$srr_id"/align
+fi
+
+if [ -d /home/SingleCellRNASeq/reads/"$srr_id" ]; then
+	rm /home/SingleCellRNASeq/reads/"$srr_id"/"$srr_id"*
+	rm /home/SingleCellRNASeq/reads/"$srr_id"/core.*
+fi

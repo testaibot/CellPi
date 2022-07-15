@@ -1,0 +1,105 @@
+#!/bin/bash
+
+#config_dropest=/home/SingleCellRNASeq/dropEst/configs/indrop_v1_2.xml
+gen_type=$1
+srr_id=$2
+cell_count=$3
+config_dropest=$4
+clean_type=$5
+
+#load environment $PATH from file, saved of setup step
+source /home/SingleCellRNASeq/env_var
+
+reads_path=/home/SingleCellRNASeq/reads
+sra_path=/home/SingleCellRNASeq/Load/tmp/public/sra
+gen_and_annot_path=/home/SingleCellRNASeq/Align
+
+
+annotM=gencode.vM15.chr_patch_hapl_scaff.annotation.gtf
+annotH=gencode.v27.chr_patch_hapl_scaff.annotation.gtf
+gen_dirM=mm10
+gen_dirH=hg19
+
+
+
+if [ "$gen_type" != "m" ] && [ "$gen_type" != "h" ]; then 
+	echo error: Unknown genome type
+	exit 1
+fi
+
+if [ ! -f "$config_dropest" ];then
+	echo error: File config_dropest with dropest config does not exist
+	exit 1
+fi
+
+if [ -z "$srr_id" ]; then
+	echo error: SRR name is empty
+ 	exit 1
+fi
+
+if [ -z "$cell_count" ]; then
+	echo error: Give cell count as second parameter
+	exit 1
+fi
+
+
+
+if [ "$gen_type" == "m" ]; then
+	curr_annot=$annotM
+	curr_gen_dir=$gen_dirM
+fi
+
+if [ "$gen_type" == "h" ]; then
+	curr_annot=$annotH
+	curr_gen_dir=$gen_dirH
+fi
+
+#Every 'if' statement below checks whether the step has already been performed
+#If so, skip to the first step where files are not generated yet
+#If any error occured, manually delete files from the latest step and re-run script
+
+if [ ! -f $sra_path/"$srr_id".sra ]; then
+	echo File  $sra_path/"$srr_id".sra not found!
+	echo Prefetching $srr_id
+	prefetch "$srr_id"
+fi
+
+
+if [ ! -d "$reads_path" ]; then
+	mkdir $reads_path
+fi
+
+if [ ! -f $reads_path/$srr_id/$srr_id* ]; then
+	echo Splitting "$srr_id".sra into separate reads
+	fastq-dump --split-3 --gzip $sra_path/"$srr_id".sra -O $reads_path/"$srr_id"
+fi
+
+
+if [ ! -f $reads_path/$srr_id/"$srr_id"_2.fastq.gz.tagged.1.fastq.gz  ]; then	
+	droptag -p 20 -n $reads_path/"$srr_id"/"$srr_id"_2.fastq.gz.tagged -c $config_dropest $reads_path/"$srr_id"/"$srr_id"_1.fastq.gz $reads_path/"$srr_id"/"$srr_id"_2.fastq.gz
+fi
+
+
+if [ ! -f $reads_path/$srr_id/align/Aligned.sortedByCoord.out.bam ]; then
+	rm -rf $reads_path/$srr_id/align && mkdir $reads_path/$srr_id/align && ls $reads_path/$srr_id/ | grep 'tagged' |  while read line ; do echo "$reads_path/$srr_id/$line," ; done | xargs STAR --runThreadN 20 --genomeDir $gen_and_annot_path/$curr_gen_dir --readFilesCommand gunzip -c  --outFileNamePrefix $reads_path/$srr_id/align/ --outFilterMultimapNmax 1 --sjdbGTFfile $gen_and_annot_path/$curr_annot --outSAMtype BAM SortedByCoordinate --readFilesIn
+fi
+
+
+if [ ! -f $reads_path/$srr_id/cell.counts.matrices.rds ]; then
+	dropest -M -g $gen_and_annot_path/$curr_annot -c $config_dropest -C $cell_count -V $reads_path/$srr_id/align/Aligned.sortedByCoord.out.bam -o $reads_path/"$srr_id"/cell.counts.matrices.rds
+fi
+
+
+if [  "$clean_type" == clean ]; then
+	if [ ! -f $reads_path/$srr_id/cell.counts.matrices.rds]; then
+		echo Final result is missing, cant perform ''clean'', use ''clean_all'' instead
+		exit 1
+	fi
+	bash /home/clean $srr_id
+fi
+
+if [  "$clean_type" == clean_all ]; then
+	bash /home/clean $srr_id
+fi
+
+

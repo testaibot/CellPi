@@ -1,0 +1,197 @@
+
+
+```{r}
+if(!require(job))
+{
+  devtools::install_github(repo = "lindeloev/job", ref = "master")
+  require(job)
+}
+
+  if (!require(loomR)){
+    devtools::install_github(repo = "mojaveazure/loomR", ref = "master")
+    require(loomR)
+  }
+  require(progress)
+
+
+
+
+
+#start as job, as the file is HUGE~1hour to load
+mtx = job::job(
+  {
+  filename = "E:/ML_data/HCA/Human_Fetal_Atlas/Human_RNA_processed.loom"
+  lfile = loomR::connect(filename)
+  
+  print(lfile)
+  print("")
+  print(names(lfile[["col_attrs"]]))
+  print("")
+  print(names(lfile[["row_attrs"]]))
+  print("")
+  print(lfile$matrix$dims)
+    
+  block_size = 5000
+  mtx_name = "matrix"
+      
+  steps = seq(1,lfile$matrix$dims[1],block_size)
+  
+  cl = init_par(NULL)
+  HFAbmtx = pbSapply(cl,steps,function(step){
+    lfile = loomR::connect(filename)
+    gc()
+    return(as(lfile[[mtx_name]][step:min(step+block_size-1,lfile$matrix$dims[1]), 1:lfile$matrix$dims[2]],"dgCMatrix"))
+  })
+  
+  stopCluster(cl)
+  gc()
+
+  job::export(HFAbmtx)
+}
+)
+
+```
+
+
+```{r}
+gc()
+
+filename = "E:/ML_data/HCA/Human_Fetal_Atlas/Human_RNA_processed.loom"
+lfile = loomR::connect(filename)
+  
+print(lfile)
+print("")
+print(names(lfile[["col_attrs"]]))
+print("")
+print(names(lfile[["row_attrs"]]))
+print("")
+print(lfile$matrix$dims)
+```
+
+```{r}
+pb = progress_bar$new(
+format = "  [:bar] :current/:total (:percent) eta: :eta",
+total = length(HFAbmtx), clear = FALSE, force =  T)
+for(i in 1:length(HFAbmtx)){
+    HFAbmtx[[i]] = t(HFAbmtx[[i]])
+    pb$tick()
+    gc()
+}
+
+```
+
+
+```{r}
+mtx = as(Matrix(0, nc, length(gi), sparse = TRUE),"dgCMatrix")
+
+cl = init_par(cl)
+
+
+mtx_maxp = pbSapply(cl,HFAbmtx,function(x){
+      return(max(x@p))
+  })
+mtx_p = pbSapply(cl,HFAbmtx[2:length(HFAbmtx)],function(x){
+      return(x@p)
+  })
+```
+
+
+```{r}
+
+
+dim(rbind(HFAbmtx[[1]],HFAbmtx[[2]]))
+```
+
+
+```{r}
+
+pb = progress_bar$new(
+format = "  [:bar] :current/:total (:percent) eta: :eta",
+total = length(Human_Fetal_Atlas_load_results), clear = FALSE, force =  T)
+for(i in 2:length(Human_Fetal_Atlas_load_results)){
+  if(!is.null(Human_Fetal_Atlas_load_results[[i]])){
+        Human_Fetal_Atlas_load_results[[1]]@p = c(Human_Fetal_Atlas_load_results[[1]]@p, max(Human_Fetal_Atlas_load_results[[1]]@p)+Human_Fetal_Atlas_load_results[[i]]@p[2:length(Human_Fetal_Atlas_load_results[[i]]@p)])
+    Human_Fetal_Atlas_load_results[[1]]@i = c(Human_Fetal_Atlas_load_results[[1]]@i, Human_Fetal_Atlas_load_results[[i]]@i) 
+    Human_Fetal_Atlas_load_results[[1]]@x = c(Human_Fetal_Atlas_load_results[[1]]@x, Human_Fetal_Atlas_load_results[[i]]@x) 
+    Human_Fetal_Atlas_load_results[[1]]@Dim[2] = as.integer(Human_Fetal_Atlas_load_results[[1]]@Dim[2]+Human_Fetal_Atlas_load_results[[i]]@Dim[2])
+    Human_Fetal_Atlas_load_results[i] = NULL
+  }
+}
+```
+
+
+
+
+```{r}
+require(pbapply)
+# read_tome_dgCMatrix()
+# pb = txtProgressBar(, style = 3)
+pb = timerProgressBar(max=lfile$matrix$dims[1]/1280)
+for(i in 1:(lfile$matrix$dims[1]/1280)){
+  temp = (lfile$matrix[i:(i+1280),])
+  setTimerProgressBar(pb,i)
+  gc()
+}
+close(pb)
+gc()
+# sum(temp==0)
+lfile$matrix$chunk_dims
+```
+```{r}
+system.time({
+  nc = 1000000000
+  eps = 0.05
+  s = max(3,ceiling(sqrt(nc)))
+  k = ceiling(eps**(-2) * log(nc))
+  r_coeff = sqrt(s/k)
+  
+  #3
+  prob = (1/(2*s))
+  gd = ceiling(prob*nc)*2
+
+
+  trandom_seed = as.numeric(Sys.time())
+  cl = init_par(cl,4)
+  
+   gi =  pbSapply(cl,1:k, function(x){
+      set.seed(x+trandom_seed)
+      val = sample(nc,gd)
+      ord = order(val, decreasing = F)
+      sgn = rep(1,gd)
+      sgn[1:(gd/2)]= -1
+      val = (sgn*val)[ord]
+      
+      return(list(val))
+   })
+  
+   mat = as(Matrix(0, nc, length(gi), sparse = TRUE),"dgCMatrix")
+   mat@p = as.integer(cumsum(c(0,sapply(gi,length))))
+   mat@i = as.integer(abs(unlist(gi))-1)
+   mat@x = as.numeric(sign(unlist(gi))*r_coeff)
+})
+sum(mat[1,]!=0)
+dim(mat)
+```
+
+```{r}
+lfile[["row_attrs"]]
+```
+
+
+```{r}
+print(lfile$col.attrs$Organ_cell_lineage[1:10])
+```
+
+```{r}
+full_matrix = read_loom_dgCMatrix(filename, row_names = "gene_short_name", col_names = "Organ_cell_lineage", chunk_size = 5000)
+dim(x = full_matrix)
+```
+
+```{r}
+gene_names = lfile[["row_attrs/gene_short_name"]]
+head(x = gene_names)
+```
+
+
+
+

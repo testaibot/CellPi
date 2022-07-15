@@ -1,0 +1,788 @@
+
+```{r}
+#normalize data
+obj@assays$RNA@data = obj@assays$RNA@counts
+obj@assays$RNA@counts = obj@assays$RNA@data[1:2,1:2]
+
+obj@assays$RNA@data@x = log1p(obj@assays$RNA@data@x)
+gc()
+```
+
+
+```{r}
+eps = 0.05
+
+indata_filter_zerosd0 = rowSds(obj@assays$RNA@data)!=0
+system.time({proj = get_random_projection(obj@assays$RNA@data[indata_filter_zerosd0,], eps = eps)})
+
+```
+
+
+```{r}
+
+#filter infrequently expressed genes (rare cell states) (otherwise too slow)
+gr = Matrix::rowMeans(abs(proj))#/sparseMatrixStats::rowSds(abs(proj))
+dens = density(gr[gr<0.5])
+gr_thr = 2*dens$x[which(dens$y==max(dens$y))[1]] #3 sigma, lol
+namg = names(gr[gr>gr_thr])
+proj = proj[namg,]
+
+proj = as(proj,"dgeMatrix")# now the matrix is already dense and working with it as sparse is way slower, so converting to dense
+
+gc()
+
+system.time({Ad = (proj)%*%t(proj)})
+system.time({md = ((proj>0)*1)%*%t((proj<0)*1)})
+system.time({md = md+t(md)+1})
+system.time({Md = Ad+md})
+
+system.time({Nd = dim(proj)[2]-(Md+md)})
+
+gc()
+# 
+# quantize = function(X, qstep){
+#   X@x = floor(abs(X@x)/qstep)*sign(X@x)
+#   return(X)
+# }
+# 
+# qstep = dim(proj)[2]*eps
+# Ad = quantize(Ad,qstep)*eps
+# md = quantize(md,qstep)*eps
+# Md = quantize(Md,qstep)*eps
+# Nd = quantize(Nd,qstep)*eps
+# 
+# gc()
+
+M = (Md)/(Md+md)
+N = (Nd)/(Md+md)
+N@x = 1/N@x
+
+M = as(M,"dgCMatrix")
+N = as(N,"dgCMatrix")
+#N@x[is.infinite(N@x)] = max(N@x[!is.infinite(N@x)])+1
+
+rm("indata_filter_zerosd0", "gr", "dens", "gr_thr", "namg", "Ad","md","Md","Nd","proj")
+gc()
+```
+
+```{r}
+
+Mm = apply(M, 1, function(x){
+  x = x > (2*mean(x)-min(x))
+ 
+  return(x)
+})
+
+Nm = apply(N, 1, function(x){
+  x = x > 1
+ 
+  return(x)
+})
+
+Gn = Mm * Nm
+
+Gsums = colSums(Gn)
+Gn = Gn[Gsums>1,Gsums>1]
+
+orderGn = names(sort(apply(Gn,1,sum),T))
+
+Mc = M[orderGn,orderGn]
+Nc = N[orderGn,orderGn]
+
+orderMc = names(sort(apply(Mc,1,sum),T))
+
+Mc = Mc[orderMc,orderMc]
+Nc = Nc[orderMc,orderMc]
+```
+
+```{r}
+sampled_names = sample(colnames(Mc),100)
+sampled_names = names(sort(apply(Mc[sampled_names,sampled_names],1,sum),T))
+heatmap(as.matrix(Mc[sampled_names,sampled_names]),Colv = NA, Rowv = NA)
+heatmap(as.matrix(Nc[sampled_names,sampled_names]),Colv = NA, Rowv = NA)
+```
+
+
+```{r}
+g1 = obj_de$gene[obj_de$cluster%in%unique(obj_de$cluster)[1]][1]
+g2 = obj_de$gene[obj_de$cluster%in%unique(obj_de$cluster)[2]][1]
+g3 = obj_de$gene[obj_de$cluster%in%unique(obj_de$cluster)[3]][1]
+
+it = 2
+gg = c(names(sort(M[g1,],T)[1:it]),names(sort(M[g1,],F)[1:it]),
+       names(sort(M[g2,],T)[1:it]),names(sort(M[g2,],F)[1:it]),
+       names(sort(M[g3,],T)[1:it]),names(sort(M[g3,],F)[1:it]))
+
+heatmap(as.matrix(M[gg,gg]),Colv = NA, Rowv = NA)
+heatmap(as.matrix(N[gg,gg]),Colv = NA, Rowv = NA)
+```
+
+
+
+```{r}
+plot(M["Ins1",names(sort(N["Ins1",],T))])
+plot(M[1,names(sort(N[1,],T))])
+```
+
+
+
+```{r}
+
+plot(density(as.matrix(Ad)))
+plot(density(as.matrix(Md)))
+plot(density(as.matrix(md)))
+plot(density(as.matrix(Nd)))
+
+```
+
+
+
+```{r}
+
+# #compute normalized diffs (direction of connection)
+# Mdd_diff = Mdd-t(Mdd)
+# mdd_diff = mdd-t(mdd)
+x = c(3,4)
+y = c(5,6)
+
+add = function(x,y){
+  if(length(x)>1&length(y)>1) return(x+y)
+  else{
+    if(length(x)>length(y)) return(c(x[1]+y,x[2]))
+    else return(c(y[1]+x, y[2]))
+    
+  }
+    
+}
+
+mul = function(x,y){
+  if(length(x)>1&length(y)>1) return(c(x[1]*y[1], x[1]*y[2]+x[2]*y[1]))
+  else return(x*y)
+}
+
+add(x,y)
+mul(x,y)
+mul(x,add(y,y))
+```
+
+```{r}
+h = function(x){
+  add(mul(x,x),3)
+}
+a = 3
+xx = c(a, 1)
+xx
+```
+
+```{r}
+h(xx)
+```
+
+```{r}
+derivative = function(f,x){
+  f(c(x,1))[2]
+}
+```
+
+```{r}
+derivative(h, 2)
+```
+
+
+```{r}
+v1 = 
+    rbind(
+      rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),
+      rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1)
+      , rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),
+      rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1)
+      )
+
+dim(v1)
+
+v3 = 
+    rbind(
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1))
+
+v2 = 
+    rbind(
+      rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1),rnorm(10000,0,1), rnorm(10000,0,1), rnorm(10000,0,1)
+      )
+
+dim(v3)
+dim(v2)
+dim(v1)
+
+X = rbind(rnorm(10,0,1),rnorm(10,0,1),rnorm(10,0,1))/10#cbind(sample(c(1:206)),sample(c(1:206)),sample(c(1:206)),sample(c(1:206)))/100
+Y = rbind(rnorm(10,0,1),rnorm(10,0,1),rnorm(10,0,1))/10#cbind(sample(c(1:206)),sample(c(1:206)),sample(c(1:206)),sample(c(1:206)))/100
+
+fr = generate_projection_matrix(10,0.015175)
+
+Xfr = X%*%fr
+temp = Xfr%*%t(Xfr)
+gt = X%*%t(X)
+
+mean(abs((gt-temp)/gt))
+
+temp = fr%*%(t(fr))
+diag(temp) = 0
+mean(abs(temp))
+
+temp = (rbind(v3)/sqrt(10000))%*%(t(rbind(v3)/sqrt(10000)))
+diag(temp) = 0
+mean(abs(temp))
+
+Xfr = X%*%(rbind(v3)/sqrt(10000))
+temp = Xfr%*%t(Xfr)
+gt = X%*%t(X)
+
+mean(abs((gt-temp)/gt))
+
+
+fwrd = (v3/sqrt(10000))%*%t(v1/sqrt(824))
+bwrd = (v1/sqrt(824))%*%(t(v3)/sqrt(10000))
+
+X_m = (X%*%fwrd)
+Y_m = (Y%*%fwrd)
+
+XY_m = X_m%*%t(Y_m)
+
+
+XY_m_rev = XY_m%*%bwrd
+
+pred = XY_m
+acc = X%*%t(Y)
+mean(abs(acc-pred)/abs(acc))
+acc
+pred
+
+for(i in 1:100){
+  fwrd = (v2/sqrt(10000))%*%t(v1/sqrt(824))
+  bwrd = (v1/sqrt(824))%*%t(v2/sqrt(10000))
+  
+  X_m_Y = array(X%*%fwrd)
+  X_m_Y_m_X = array(X_m_Y%*%bwrd)
+  
+  loss_Y = (Y - X_m_Y)
+  loss_Y_m_X = array(loss%*%bwrd)
+  
+  
+  Xp = X-loss_Y_m_X
+  Yp = array(Xp%*%fwrd)
+  X = Xp
+  print(c(cor(X,X_m_Y_m_X),cor(Y, X_m_Y),cor(Yp,Y)))
+}
+
+X-loss_Y_m_X
+
+Xn_pred = Xn-loss_Yn_m_Xn
+Xn_pred_m_Ym = Xn_pred%*%bwrd
+Xn_pred_m_Ym
+Yn
+
+Y_pred_m = (X+grad)%*%v1
+
+Y_pred = Y_pred_m%*%t(v2)
+
+Y
+Y_pred
+
+
+v2 = v2*sqrt(10000+1850)
+v3 = 
+    rbind(
+      rnorm(10000,0,1),
+      rnorm(10000,0,1),
+      rnorm(10000,0,1))/sqrt(10000)
+
+x1 = cbind(c(0,1,2),c(3,4,5))
+x2 = cbind(c(2,1,2),c(0,4,5))
+t(x1)%*%x2
+t(x1)%*%(v2)%*%t(v2)%*%x2
+t(x1)%*%v2%*%t(t(x2)%*%v2)
+
+(v2)%*%t(v2)
+fr = v2%*%t(v3)
+br = v3%*%t(v2)
+
+t(x1)%*%v2%*%t(v3)%*%v3%*%t(v2)
+
+diag(t(v3*sqrt(10000))%*%(v3*sqrt(10000)))
+
+x1%*%v2%*%t(v2)%*%v2%*%t(v3)%*%v3%*%t(v2)
+
+dim(t(v3)%*%v3)
+
+dim(t(t(x2)%*%v3%*%t(v3)%*%v2))
+dim((v3)%*%t(fr))
+dim(t(x2))
+
+
+v2%*%t(fr)
+sd(v2)
+
+
+```
+
+
+
+```{r}
+#mask to use only closest communities otherwise too heavy computationally
+#create mask
+
+thr_len = ncol(td)
+thr_comm = ceiling(sqrt(thr_len)+1)/thr_len
+
+tdc = apply(td,1,function(x){
+  thr_den = quantile(x,thr_comm)
+  x[x>thr_den] = NA
+  return(x)
+})
+tdc = as(tdc, "dgCMatrix")
+
+# md_c = apply(mdd,2,function(x){
+#   thr_den = quantile(x,1-thr_comm)
+#   x[x<thr_den] = 0
+#   return(x)
+# })
+# md_c = as(mdd_c, "dgCMatrix")
+
+#apply mask
+# Mdm = Md*mNd_c
+# Ndm = Nd*mNd_c
+tdm = td*t(tdc)
+# mdm = mdd*mask
+# Mdm_diff = Mdd_diff*mask
+# mdm_diff = mdd_diff*mask
+
+gc()
+```
+
+
+```{r}
+cl1 = obj_de[obj_de$cluster%in%unique(obj_de$cluster)[11],]$gene[1:3]
+cl2 = obj_de[obj_de$cluster%in%unique(obj_de$cluster)[12],]$gene[1:3]
+
+# Md[c(cl1,cl2),c(cl1,cl2)]*normd[c(cl1,cl2)]
+# md[c(cl1,cl2),c(cl1,cl2)]*normd[c(cl1,cl2)]
+# Nd[c(cl1,cl2),c(cl1,cl2)]*normd[c(cl1,cl2)]
+# 
+# normd[c(cl1,cl2)]/nrow(proj)
+
+(Md[c(cl1,cl2),c(cl1,cl2)]-(normd[c(cl1,cl2)]/nrow(proj)/2))/md[c(cl1,cl2),c(cl1,cl2)]
+
+
+obj_de$gene[1]
+plot(td[names(sort(td["Mgp",],T)),"Mgp"])
+plot(tdm[names(sort(tdm["Mgp",],T)),"Mgp"])
+
+
+```
+
+
+```{r}
+sort(td["H2-Q10",],T)[1:20]
+sort(td[,"H2-Q10"],T)[1:20]
+
+sort(td["Psme1",],T)[1:20]
+sort(td[,"Psme1"],T)[1:20]
+tdd = td
+diag(tdd) = 0
+plot(apply(Nd,2,max)[obj_de$gene])
+plot(apply(Nd,1,max)[obj_de$gene])
+```
+
+
+```{r}
+td_knn = apply(tdm,2,function(x){
+  x = x[!is.na(x)]
+  thr_den = mean(x)-sd(x)
+  x = sort(x[x<thr_den],T)
+  return(x)
+})
+td_knn = td_knn[which(sapply(td_knn,length)>1)]
+
+freq = (table(unlist(sapply(td_knn,names))))
+
+td_knn_freq = sapply(td_knn,function(x){
+  return(freq[names(x)])
+})
+td_knn_freq["Iapp"]
+
+cl = init_par(cl)
+gcl = pbSapply(cl, names(td_knn),function(gg){
+  len_gg = -1
+  while(len_gg!=length(gg)){
+    len_gg = length(gg)
+    gg = unique(unlist(array(sapply(td_knn[gg], names))))
+  }
+  gg = sort(gg[gg%in%names(gcl)])
+  return(list(paste0(gg,collapse = ":")))
+})
+names(gcl) = names(md_knn)
+
+gcl_unique = names(table(unlist(gcl)))
+cl = init_par(cl)
+gcl_unique = pbSapply(cl, gcl_unique, function(x){
+  x = strsplit(x,":")[[1]]
+  return(list(x))
+})
+
+gcl_unique = gcl_unique[order(sapply(gcl_unique,length))]
+
+
+dup = gcl_unique
+cl = init_par(cl)
+dup = pbSapply(cl, dup,function(x){
+  idx = which(sapply(dup,function(y){
+    return(sum(x %in% y)/length(x)>0.95)
+  }))
+  x = sort(unique(unlist(dup[array(idx)])))
+  
+  return(list(paste0(x,collapse = ":")))
+})
+
+undup = names(table(unlist(dup)))
+cl = init_par(cl)
+undup = pbSapply(cl, undup, function(x){
+  x = strsplit(x,":")[[1]]
+  return(list(x))
+})
+
+undup = undup[order(sapply(undup,length))]
+
+undup = undup[sapply(undup,length)>1]
+
+plot(dup)
+```
+
+
+```{r}
+x = mdm[,"Ins1"]
+x = x[!is.na(x)]
+
+
+
+plot(x)
+```
+
+
+```{r}
+#extract communities to a separate list
+#after masking on previous step "x>0" is eq to "x>quantile(x,1-thr_comm)"
+
+Mdm_knn = apply(Mdm,1,function(x){sort(x[x>0],T)})
+Mdm_knn = Mdm_knn[sapply(Mdm_knn, length)>1]
+
+mdm_knn = apply(mdm,1,function(x){sort(x[x>0],T)})
+mdm_knn = mdm_knn[sapply(mdm_knn, length)>1]
+
+#score communities by normalized diff
+nMd_knn = sapply(names(Mdm_knn),function(g){
+  Mdm_diff[g,names(Mdm_knn[[g]])]
+})
+nmd_knn = sapply(names(mdm_knn),function(g){
+  mdm_diff[g,names(mdm_knn[[g]])]
+})
+gc()
+
+```
+
+
+```{r}
+#reduce each gene's community size to the first out-connection
+
+nMd_knn = sapply(nMd_knn,function(x){
+  names(x[1:min(which(x<0)-1,length(x))])
+})
+nMd_knn = nMd_knn[sapply(nMd_knn, length)>1]
+
+nmd_knn = sapply(nmd_knn,function(x){
+  names(x[1:min(which(x<0)-1,length(x))])
+})
+nmd_knn = nmd_knn[sapply(nmd_knn, length)>1]
+gc()
+```
+
+
+```{r}
+# genes_best[!genes_best%in%names(Md_knn)]
+# 
+# 
+# cl = init_par(cl)
+# 
+# eMd = pbSapply(cl,nMd_knn,function(x){
+#   len = -1
+#   while(len!=length(x)){
+#     len = length(x)
+#     x = unique(unlist(nMd_knn[x]))
+#     if(length(x)<1|length(x)>(thr_comm*thr_len))break
+#   }
+#   return(list(x))
+# })
+# names(eMd) = names(nMd_knn)
+# 
+# cl = init_par(cl)
+# emd = pbSapply(cl,nmd_knn,function(x){
+#   len = -1
+#   while(len!=length(x)){
+#     len = length(x)
+#     x = unique(unlist(nmd_knn[x]))
+#     if(length(x)<1|length(x)>(thr_comm*thr_len))break
+#   }
+#   return(list(x))
+# })
+# names(emd) = names(nmd_knn)
+
+nMd = nMd_knn[which(sapply(names(nMd_knn), function(g){
+  x = nMd_knn[[g]]
+  all(x%in%names(nMd_knn))&(g%in%x[1])
+}))]
+
+nmd = nmd_knn[which(sapply(names(nmd_knn), function(g){
+  x = nmd_knn[[g]]
+  all(x%in%names(nmd_knn))&(g%in%x[1])
+}))]
+
+
+sort(table(unlist(nMd)), T)[1:10]
+sort(table(unlist(nmd)), T)[1:10]
+
+quantile(sort(table(unlist(nMd)), T),c(0.1,0.9))
+```
+
+```{r}
+Md_cliques = get_cliques(nMd_knn, min_clique_size = 3)
+md_cliques = get_cliques(nmd_knn, min_clique_size = 3)
+
+Md_cliques_temp = Md_cliques
+md_cliques_temp = md_cliques
+```
+
+```{r}
+Md_hash_temp = names(sapply(Md_cliques_temp,function(x){
+  return(paste0(names(x),collapse = "_"))
+}))
+Md_hash = names(sapply(Md_cliques,function(x){
+  return(paste0(names(x),collapse = "_"))
+}))
+md_hash_temp = names(sapply(md_cliques_temp,function(x){
+  return(paste0(names(x),collapse = "_"))
+}))
+md_hash = names(sapply(md_cliques,function(x){
+  return(paste0(names(x),collapse = "_"))
+}))
+
+sum(md_hash_temp%in%md_hash)
+```
+
+
+
+
+```{r}
+mx_obj[obj_de[obj_de$cluster%in%"Pancreas_1",]$gene[1:10],obj_de[obj_de$cluster%in%"Pancreas_1",]$gene[1:10]]
+mx_obj[c("Ins1","Iapp","Slc34a1","Keg1","Ngp","Mpo",unique(obj_de[obj_de$cluster%in%"Prostate_2",]$gene)[1:3]),c("Ins1","Iapp","Slc34a1","Keg1","Ngp","Mpo",unique(obj_de[obj_de$cluster%in%"Prostate_2",]$gene)[1:3])]
+
+
+
+gc()
+
+#   table(sapply(order(unique(obj_de$cluster)),function(i){
+#   sum(genes_our%in%names(sort(Md[unique(obj_de$gene),obj_de[obj_de$cluster%in%(unique(obj_de$cluster)[i]),]$gene[1]],T)[1:50]))
+# }))
+
+  
+  # m_obj[c("Nfe2l1","Irf7","Stat1","Zfp597"),c("Nfe2l1","Irf7","Stat1","Zfp597")]
+  # mx_obj[c("Ins1","Iapp","Slc34a1","Keg1","Ngp","Mpo",unique(obj_de[obj_de$cluster%in%"Prostate_2",]$gene)[1:3]),c("Ins1","Iapp","Slc34a1","Keg1","Ngp","Mpo",unique(obj_de[obj_de$cluster%in%"Prostate_2",]$gene)[1:3])]
+  # 
+  # 
+  
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+#obj_de_c = obj_de[1:10,]#
+#obj_de_t = obj_de#
+
+obj_de = obj_de_t[obj_de_t$avg_logFC>0,]
+# obj_de = cbind(obj_de,grb = grb[obj_de$gene])
+# obj_de = cbind(obj_de,kr = kr[obj_de$gene])
+# obj_de = cbind(obj_de,cmax = cmax[obj_de$gene])
+# obj_de = cbind(obj_de,grs = grs[obj_de$gene])
+# obj_de = cbind(obj_de,gl = gl[obj_de$gene])
+# obj_de = cbind(obj_de,idd = idd[obj_de$gene])
+
+obj_de = obj_de[order(obj_de$pct.1-obj_de$pct.2,decreasing = T),]
+obj_de = obj_de[obj_de$gene%in%rownames(proj),]
+obj_de = obj_de[order(obj_de$cluster,decreasing = T),]
+obj_de = obj_de[order(obj_de$p_val_adj,decreasing = F),]
+obj_de = obj_de[order(obj_de$avg_logFC,decreasing = F),]
+
+
+
+```
+
+
+```{r}
+
+ojk = obj@meta.data$orig.ident
+names(ojk) = rownames(obj@meta.data)
+# I need this also for now
+obj@active.ident = ojk
+plan("multiprocess", workers = 4)
+obj_de = FindAllMarkers(obj, logfc.threshold = 0.05, test.use = "MAST")
+
+obj_de = obj_de[obj_de$avg_logFC>0,]
+
+
+```
+
+
+```{r}
+heatmap(as.matrix(Mdd[unlist(list_best),unlist(list_best)]),Colv = NA, Rowv = NA, scale = "none",col = colorRampPalette(c("blue","yellow", "red"))(100))
+heatmap(as.matrix(mdd[unlist(list_best),unlist(list_best)]),Colv = NA, Rowv = NA, scale = "none",col = colorRampPalette(c("blue","yellow", "red"))(100))
+
+heatmap(as.matrix(Mdd[unlist(list_best_md),unlist(list_best_md)]),Colv = NA, Rowv = NA, scale = "none",col = colorRampPalette(c("blue","yellow", "red"))(100))
+
+heatmap(as.matrix(mdd[unlist(list_best_md),unlist(list_best_md)]),Colv = NA, Rowv = NA, scale = "none",col = colorRampPalette(c("blue","yellow", "red"))(100))
+
+```
+
+```{r}
+ nMd_knn[list_best[[1]]]
+```
+
+
+```{r}
+genes_best = unique(unlist(array(sapply(unique(obj_de$cluster),function(i){
+  names(sort(Mdd[unique(obj_de$gene),obj_de[obj_de$cluster%in%i,]$gene[1]],T)[1:10])
+}))))
+
+list_best = sapply(array(unique(obj_de$cluster)),function(i){
+  list(names(sort(Mdd[unique(obj_de$gene),obj_de[obj_de$cluster%in%i,]$gene[1]],T)[1:10]))
+})
+
+
+
+genes_our = unique(unlist(list_best[!sapply(list_best,function(x)x[1])%in%names(nMd_knn)]))
+
+meansum = apply(M, 1,mean)
+genes_our = unique(obj_de$gene)[1:163] #names(which(meansum<0.49))
+
+
+genes_use = colnames(Gn)#unique(obj_de$gene)[1:2000]# genes_our#genes_our#names(which(sort(table(unlist(nMd)),T)>=9))
+
+
+
+```
+
+
+```{r}
+#genes_use = unique(array(plev[,genes_use]))#c("Irf7", "Zfp597", "Stat1", "Crebl2","Thyn1", "Cbfb", "Nfe2l1", "Creb3")
+#scale data and compute pca
+
+obj_d = ScaleData(obj, genes_use, verbose = F, do.center = F, do.scale = F)
+obj_d = compute_pca(obj_d, genes_use)
+
+#calculate tsne to visualize results
+obj_d = RunTSNE(object = obj_d,
+                            dims = 1:ncol(obj_d@reductions$pca@cell.embeddings),
+                              dim.embed = 2,
+                              tsne.method = "FIt-SNE",
+                              fast_tsne_path = "D:/Program Files/FltSNE/FItSNE.exe",
+                              nthreads = 8,
+                              nbody_algo = "FFT",
+                              reduction = "pca",
+                              check_duplicates = FALSE, 
+                              perplexity = max(min(200,ceiling(sqrt(ncol(obj_d)))+1),3),
+                              seed.use = as.numeric(Sys.time()))
+
+# obj = compute_clustering_k_means_rez_new(obj)
+
+```
+
+```{r}
+names(obj@meta.data)
+```
+
+```{r}
+#original annotation
+DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "orig.ident", pt.size = 1, label = T)
+# DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "ident", pt.size = 1, label = T)
+
+```
+
+```{r}
+#original annotation
+DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "orig.ident", pt.size = 1, label = T)
+#DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "orig.ident1", pt.size = 1, label = T)
+```
+
+```{r}
+#original annotation
+DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "orig.ident", pt.size = 1, label = T)
+DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "ident", pt.size = 1, label = T)
+```
+
+```{r}
+#original annotation
+DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "orig.ident", pt.size = 1, label = T)
+DimPlot(obj_d, c(1,2), reduction = "tsne", group.by = "ident", pt.size = 1, label = T)
+```
+
+```{r}
+Seurat::RidgePlot(obj,c(genes_use[1:4]), combine = T)
+FeaturePlot(obj_d, sample(genes_use,30), cols = c("green", "blue", "red"), combine = F)
+```
+
+```{r}
+FeaturePlot(obj_d, gcl_unique[[500]], cols = c("green", "blue", "red"), combine = F)
+
+FeaturePlot(obj_d, clust[["Ate1"]], cols = c("green", "blue", "red"), combine = F)
+
+FeaturePlot(obj_d, c("Ins1","Iapp","Slc34a1","Keg1","Ngp","Mpo",unique(obj_de[obj_de$cluster%in%"Prostate_2",]$gene)[1:2]), cols = c("green", "blue", "red"), combine = F)
+
+```
+
+```{r}
+FeaturePlot(obj_d, Md_cliques_decr[[4]], cols = c("green", "blue", "red"), combine = F)
+```
+
+```{r}
+data_t = cbind(
+  c(0,0,0,0,2,2,2),
+  c(0,0,0,0,1,2,2),
+  c(0,0,0,0,1,1,2),
+  c(0,0,0,0,1,1,1)
+               )
+```
+
+```{r}
+e = 0.05
+n = 20000000
+
+print((4+4*sqrt(
+  1-(1+e*2)*(1-log(2)-log(n))
+))/(1+2*e^2))
+
+print((2*log(n))/e^2)
+```
+
+```{r}
+
+```
+

@@ -1,0 +1,95 @@
+
+```{r}
+if (!require(rhdf5)){
+  devtools::install_github('grimbough/rhdf5', ref = "RELEASE_3_11", ask = FALSE, INSTALL_opts = c('--no-multiarch'))
+  require(rhdf5)
+}
+
+
+list_from_group <- function(group) {
+    l <- list()
+    content <- h5ls(group, recursive = FALSE)
+    for (i in rownames(content)) {
+        name <- content[i, "name"]
+        type <- content[i, "otype"]
+        if (type == "H5I_DATASET") {
+            result <- read_clean(h5read(group, name))
+            l[[name]] <- result
+        } else {
+            stopifnot(type == "H5I_GROUP")
+            l[[name]] <- list_from_group(H5Gopen(group, name))
+        }
+    }
+    l
+}
+
+read_expr_mat <- function(file) {
+    exprs_handle <- H5Oopen(file, "exprs")
+    if (H5Iget_type(exprs_handle) == "H5I_GROUP") {  # Sparse
+        mat <- new(
+            "dgCMatrix",
+            x = as.double(read_clean(h5read(exprs_handle, "data"))),
+            i = read_clean(h5read(exprs_handle, "indices")),
+            p = read_clean(h5read(exprs_handle, "indptr")),
+            Dim = rev(read_clean(h5read(exprs_handle, "shape")))
+        )
+    } else if (H5Iget_type(exprs_handle) == "H5I_DATASET") {  # Dense
+        mat <- read_clean(H5Dread(exprs_handle))
+    }
+    mat
+}
+
+read_clean <- function(data) {  # Convert arrays
+    if (length(dim(data)) == 1) {
+        data <- as.vector(data)
+    } else if (length(dim(data)) == 2) {
+        data <- as.matrix(data)
+    }
+    data
+}
+
+
+```
+
+```{r}
+
+filename = "E:/ML_data/HCA/Quake/Quake_10x.h5"
+obj_de_t = readRDS("E:/ML_data/HCA/Quake/Quake_10x_de.rds")
+
+f <- H5Fopen(filename, flags="H5F_ACC_RDONLY")
+h5ls(f)
+
+obs_names <- as.vector(H5Dread(H5Dopen(f, "obs_names")))
+var_names <- as.vector(H5Dread(H5Dopen(f, "var_names")))
+obs <- as.data.frame(list_from_group(H5Gopen(f, "obs")))
+var <- as.data.frame(list_from_group(H5Gopen(f, "var")))
+
+obs <- data.frame(row.names = obs_names)
+var <- data.frame(row.names = var_names)
+
+uns <- list_from_group(H5Gopen(f, "uns"))
+
+mtx <- read_expr_mat(f)
+colnames(mtx) <-types2names(as.factor(as.vector(H5Dread(H5Dopen(f, "obs/organ")))))#  obs_names
+rownames(mtx) <- var_names
+```
+
+
+```{r}
+obj = seur_create(mtx)
+
+
+obj[["organ"]] = as.factor(as.vector(H5Dread(H5Dopen(f, "obs/organ"))))
+obj[["cell_ontology_class"]] = as.factor(as.vector(H5Dread(H5Dopen(f, "obs/cell_ontology_class"))))
+obj[["cell_ontology_id"]] = as.factor(as.vector(H5Dread(H5Dopen(f, "obs/cell_ontology_id"))))
+obj[["cell_type1"]] = as.factor(as.vector(H5Dread(H5Dopen(f, "obs/cell_type1"))))
+obj[["gender"]] = as.factor(as.vector(H5Dread(H5Dopen(f, "obs/gender"))))
+obj[["plate"]] = as.factor(as.vector(H5Dread(H5Dopen(f, "obs/plate"))))
+
+H5close()
+
+
+rm("mtx", "obs", "var", "uns", "obs_names", "var_names","f","filename")
+gc()
+```
+
