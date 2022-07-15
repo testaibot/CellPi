@@ -1,22 +1,5 @@
 
 
-```{r}
-#load TFs table
-tf = read.table("D:/bioinf/SingleCellRNASeq/10_VS/Proj/Antonio/Mus_musculus_TF.txt", sep = "\t")
-```
-
-
-```{r}
-#load dataset
-#load("D:/bioinf/Sk/SingleCell/SingleCellRNASeq/10_VS/Proj/Antonio/datasets/LimbMuscle/pthw_data_Limb_1month_2019-09-17_22.19.RData")
-
-senic_tm = as.matrix(read.table("D:/bioinf/SingleCellRNASeq/10_VS/Proj/Antonio/datasets/LimbMuscle/Senis_LimbMuscle_Facs_counts&TPM/Limb_Muscle_facs_counts.txt", sep = "\t"))
-senic_tm_an = as.matrix(read.table("D:/bioinf/SingleCellRNASeq/10_VS/Proj/Antonio/datasets/LimbMuscle/Senis_LimbMuscle_Facs_counts&TPM/Limb_Muscle_facs_counts_annotation.txt", sep = "\t", header = T))
-
-
-
-```
-
 
 ```{r}
 #matrix preprocessing
