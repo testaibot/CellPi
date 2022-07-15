@@ -3,7 +3,7 @@
 
 
 # Run new fresh Ubuntu 16.04 docker image
-docker run -it /home/samosyuk/gen/SRR/SingleCellRNASeq:/home ubuntu:16.04
+docker run -it /home/username/gen/SRR/SingleCellRNASeq:/home ubuntu:16.04
 
 cd /home
 chmod +x setup
